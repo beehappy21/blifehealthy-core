@@ -23,7 +23,7 @@ Route::post('/auth/login', [AuthController::class, 'login']);
 Route::get('/shop/{merchantId}/products', [ProductController::class, 'listShop']);
 Route::get('/products/{id}', [ProductController::class, 'detail']);
 
-// ✅ reviews public (ดูรีวิวได้)
+// reviews public (ดูรีวิวได้)
 Route::get('/products/{id}/reviews', [ReviewController::class, 'list']);
 
 /**
@@ -50,9 +50,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/merchant/products/{id}/variants', [ProductController::class, 'addVariant']);
     Route::patch('/merchant/variants/{id}/stock', [ProductController::class, 'updateStock']);
 
-    // ✅ reviews ต้องมี token
-    Route::post('/products/{id}/reviews', [ReviewController::class, 'createOrUpdate']);      // user รีวิว
-    Route::post('/merchant/reviews/{id}/reply', [ReviewController::class, 'reply']);        // ร้านตอบรีวิว
+    // ✅ product images (merchant) — ไม่ต้องเป็น admin
+    Route::post('/merchant/products/{id}/images', [ProductController::class, 'addImage']);
+    Route::patch('/merchant/images/{imageId}', [ProductController::class, 'updateImage']);
+    Route::delete('/merchant/images/{imageId}', [ProductController::class, 'deleteImage']);
+
+    // reviews ต้องมี token (เขียน/ตอบรีวิว)
+    Route::post('/products/{id}/reviews', [ReviewController::class, 'createOrUpdate']);
+    Route::post('/merchant/reviews/{id}/reply', [ReviewController::class, 'reply']);
 
     // admin only
     Route::middleware('admin')->group(function () {
