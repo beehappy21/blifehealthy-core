@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>POS Settings • Token</title>
+  <style>
+    :root{--bg:#0b1220;--card:#121a2b;--text:#e7eefc;--muted:#9fb0d0;--ok:#22c55e;--bad:#ef4444;--warn:#f59e0b;--line:#223055}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,"Kanit",sans-serif;background:linear-gradient(180deg,#071026,#0b1220);color:var(--text)}
+    .wrap{max-width:520px;margin:0 auto;padding:16px}
+    .top{display:flex;align-items:center;justify-content:space-between;margin:10px 0 14px}
+    .title{font-size:18px;font-weight:700}
+    .card{background:rgba(18,26,43,.92);border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0;box-shadow:0 10px 25px rgba(0,0,0,.25)}
+    .row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:8px 0}
+    .muted{color:var(--muted);font-size:13px}
+    .badge{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.04)}
+    .badge.ok{border-color:rgba(34,197,94,.35);color:#bbf7d0}
+    .badge.bad{border-color:rgba(239,68,68,.35);color:#fecaca}
+    .badge.warn{border-color:rgba(245,158,11,.35);color:#fde68a}
+    textarea{width:100%;box-sizing:border-box;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--text);padding:12px;font-size:14px;outline:none;min-height:92px;resize:vertical}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    button{border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--text);padding:10px 12px;border-radius:12px;font-weight:600;cursor:pointer}
+    button.primary{background:linear-gradient(90deg,#2563eb,#22c55e);border:0}
+    button.danger{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    pre{white-space:pre-wrap;word-break:break-word;margin:10px 0 0;color:#d7e4ff}
+    a{color:#93c5fd;text-decoration:none}
+    .hr{height:1px;background:var(--line);margin:10px 0}
+    .small{font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="title">POS Settings</div>
+      <span id="statusBadge" class="badge warn">ยังไม่ได้ทดสอบ</span>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <div style="font-weight:700">POS Token</div>
+          <div class="muted">เก็บใน localStorage ของเครื่องนี้</div>
+        </div>
+        <div class="muted small" id="tokenLen">LEN=0</div>
+      </div>
+
+      <textarea id="tokenInput" placeholder="วาง POS token เช่น 17|xxxx..."></textarea>
+
+      <div class="btns">
+        <button class="primary" id="saveBtn">บันทึก Token</button>
+        <button id="testBtn">ทดสอบการเชื่อมต่อ</button>
+        <button class="danger" id="clearBtn">ล้าง Token</button>
+      </div>
+
+      <div class="hr"></div>
+      <div class="muted small">
+        Tip: ถ้า token ถูก <b>revoke</b> ระบบจะตอบ <code>status: revoked</code> และ <code>can_operate: false</code>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700">สถานะเครื่อง (จาก /api/pos/me)</div>
+      <div class="muted">ใช้ทำหน้า “Connected / Revoked / Needs Token” ได้เลย</div>
+      <pre id="result">{}</pre>
+
+      <div class="btns">
+        <button id="goPosBtn" class="primary" disabled>ไปหน้า POS Terminal</button>
+        <a class="muted" href="./terminal.html" id="directLink" style="align-self:center;display:none">เปิด POS Terminal</a>
+      </div>
+    </div>
+
+    <div class="muted small">
+      API ที่ใช้: <code>GET /api/pos/me</code>
+    </div>
+  </div>
+
+<script>
+  const LS_KEY = "pos_token";
+  const tokenInput = document.getElementById("tokenInput");
+  const tokenLen = document.getElementById("tokenLen");
+  const result = document.getElementById("result");
+  const statusBadge = document.getElementById("statusBadge");
+  const goPosBtn = document.getElementById("goPosBtn");
+  const directLink = document.getElementById("directLink");
+
+  function getToken() {
+    return (localStorage.getItem(LS_KEY) || "").trim();
+  }
+  function setToken(t) {
+    localStorage.setItem(LS_KEY, (t || "").trim());
+  }
+  function clearToken() {
+    localStorage.removeItem(LS_KEY);
+  }
+
+  function setBadge(kind, text){
+    statusBadge.className = "badge " + (kind || "warn");
+    statusBadge.textContent = text;
+  }
+  function show(obj){
+    result.textContent = JSON.stringify(obj, null, 2);
+  }
+  function updateLen(){
+    const t = tokenInput.value.trim();
+    tokenLen.textContent = "LEN=" + t.length;
+  }
+
+  async function apiPosMe(token){
+    const res = await fetch("/api/pos/me", {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "Authorization": "Bearer " + token
+      }
+    });
+    const data = await res.json().catch(()=>({ok:false,error:"INVALID_JSON"}));
+    return { status: res.status, data };
+  }
+
+  async function test(){
+    const token = getToken();
+    if(!token){
+      setBadge("warn","ไม่มี Token");
+      show({ok:false,error:"NO_TOKEN"});
+      goPosBtn.disabled = true;
+      directLink.style.display = "none";
+      return;
+    }
+
+    setBadge("warn","กำลังทดสอบ...");
+    const {status, data} = await apiPosMe(token);
+    show({http_status: status, ...data});
+
+    if(status === 200 && data.ok){
+      if(data.status === "active" && data.can_operate){
+        setBadge("ok","Connected (Active)");
+        goPosBtn.disabled = false;
+        directLink.style.display = "inline";
+      } else {
+        setBadge("bad","Revoked / ใช้งานไม่ได้");
+        goPosBtn.disabled = true;
+        directLink.style.display = "inline";
+      }
+      return;
+    }
+
+    if(status === 401){
+      setBadge("bad","Unauthenticated");
+    } else if(status === 403){
+      setBadge("bad","Forbidden");
+    } else {
+      setBadge("bad","Error " + status);
+    }
+    goPosBtn.disabled = true;
+    directLink.style.display = "none";
+  }
+
+  // init
+  tokenInput.value = getToken();
+  updateLen();
+
+  tokenInput.addEventListener("input", updateLen);
+
+  document.getElementById("saveBtn").addEventListener("click", async ()=>{
+    setToken(tokenInput.value);
+    tokenInput.value = getToken();
+    updateLen();
+    await test();
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", ()=>{
+    clearToken();
+    tokenInput.value = "";
+    updateLen();
+    setBadge("warn","ล้าง Token แล้ว");
+    show({});
+    goPosBtn.disabled = true;
+    directLink.style.display = "none";
+  });
+
+  document.getElementById("testBtn").addEventListener("click", test);
+
+  goPosBtn.addEventListener("click", ()=>{
+    location.href = "./terminal.html";
+  });
+
+  // auto test on load
+  test();
+</script>
+</body>
+</html>

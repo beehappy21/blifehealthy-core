@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>POS Terminal</title>
+  <style>
+    :root{--bg:#0b1220;--card:#121a2b;--text:#e7eefc;--muted:#9fb0d0;--ok:#22c55e;--bad:#ef4444;--warn:#f59e0b;--line:#223055}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,"Kanit",sans-serif;background:linear-gradient(180deg,#071026,#0b1220);color:var(--text)}
+    .wrap{max-width:560px;margin:0 auto;padding:16px}
+    .top{display:flex;align-items:center;justify-content:space-between;margin:10px 0 14px}
+    .title{font-size:18px;font-weight:800}
+    .card{background:rgba(18,26,43,.92);border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0;box-shadow:0 10px 25px rgba(0,0,0,.25)}
+    .muted{color:var(--muted);font-size:13px}
+    input{width:100%;box-sizing:border-box;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--text);padding:12px;font-size:14px;outline:none}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    button{border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--text);padding:10px 12px;border-radius:12px;font-weight:700;cursor:pointer}
+    button.primary{background:linear-gradient(90deg,#2563eb,#22c55e);border:0}
+    button.danger{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    pre{white-space:pre-wrap;word-break:break-word;margin:10px 0 0;color:#d7e4ff}
+    .badge{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.04)}
+    .badge.ok{border-color:rgba(34,197,94,.35);color:#bbf7d0}
+    .badge.bad{border-color:rgba(239,68,68,.35);color:#fecaca}
+    .badge.warn{border-color:rgba(245,158,11,.35);color:#fde68a}
+    a{color:#93c5fd;text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="title">POS Terminal</div>
+      <span id="posStatus" class="badge warn">Checking...</span>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700">Coupon Code</div>
+      <div class="muted">สแกน QR แล้วเอา “code” มาใส่ (เช่น CP260227-XXXXXX)</div>
+      <input id="code" placeholder="วาง/พิมพ์ coupon code" autocomplete="off" />
+
+      <div class="btns">
+        <button id="lookupBtn">Lookup</button>
+        <button id="scanBtn" class="primary">Scan</button>
+        <button id="redeemBtn" disabled>Redeem</button>
+        <button id="clearBtn" class="danger">Clear</button>
+      </div>
+
+      <div class="muted" id="hint" style="margin-top:10px"></div>
+      <pre id="out">{}</pre>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:700">POS Token</div>
+      <div class="muted">หากขึ้น revoked ให้กลับไปหน้า Settings เพื่ออัปเดต token</div>
+      <div class="btns">
+        <a href="./settings.html">ไปหน้า POS Settings</a>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const LS_KEY = "pos_token";
+  const codeEl = document.getElementById("code");
+  const outEl = document.getElementById("out");
+  const hintEl = document.getElementById("hint");
+  const posStatus = document.getElementById("posStatus");
+
+  const lookupBtn = document.getElementById("lookupBtn");
+  const scanBtn = document.getElementById("scanBtn");
+  const redeemBtn = document.getElementById("redeemBtn");
+  const clearBtn = document.getElementById("clearBtn");
+
+  function token(){ return (localStorage.getItem(LS_KEY) || "").trim(); }
+  function show(x){ outEl.textContent = JSON.stringify(x, null, 2); }
+  function hint(t){ hintEl.textContent = t || ""; }
+
+  function badge(kind, text){
+    posStatus.className = "badge " + (kind || "warn");
+    posStatus.textContent = text;
+  }
+
+  async function api(path, method="GET", body=null){
+    const t = token();
+    if(!t) return {status: 401, data:{ok:false,error:"NO_TOKEN"}};
+
+    const res = await fetch(path, {
+      method,
+      headers: {
+        "Accept":"application/json",
+        "Content-Type":"application/json",
+        "Authorization":"Bearer " + t
+      },
+      body: body ? JSON.stringify(body) : null
+    });
+
+    const data = await res.json().catch(()=>({ok:false,error:"INVALID_JSON"}));
+    return {status: res.status, data};
+  }
+
+  async function checkPosMe(){
+    const {status, data} = await api("/api/pos/me","GET");
+    if(status===200 && data.ok){
+      if(data.status==="active" && data.can_operate){
+        badge("ok","POS Active");
+        return true;
+      }
+      badge("bad","POS Revoked");
+      show({http_status:status, ...data});
+      return false;
+    }
+    badge("bad","No Token / Unauth");
+    show({http_status:status, ...data});
+    return false;
+  }
+
+  async function lookup(){
+    const c = codeEl.value.trim();
+    if(!c) return hint("ใส่ coupon code ก่อน");
+    hint("Loading...");
+    const {status, data} = await api(`/api/pos/coupons/${encodeURIComponent(c)}`,"GET");
+    show({http_status: status, ...data});
+
+    if(status===200 && data.ok){
+      const st = data.coupon?.status;
+      if(st==="confirmed"){
+        redeemBtn.disabled = false;
+        hint("confirmed ✅ กด Redeem ได้");
+      } else if(st==="pending_confirm"){
+        redeemBtn.disabled = true;
+        hint("pending_confirm ⏳ รอผู้ซื้อยืนยัน (กด Scan เพื่อขอ confirm)");
+      } else if(st==="redeemed"){
+        redeemBtn.disabled = true;
+        hint("redeemed ✅ ใช้ไปแล้ว");
+      } else {
+        redeemBtn.disabled = true;
+        hint("status=" + st);
+      }
+      return;
+    }
+
+    redeemBtn.disabled = true;
+    hint(`Error ${status} ${(data && (data.error||data.message)) || ""}`);
+  }
+
+  async function scan(){
+    const c = codeEl.value.trim();
+    if(!c) return hint("ใส่ coupon code ก่อน");
+    hint("Scanning...");
+    const {status, data} = await api(`/api/pos/coupons/${encodeURIComponent(c)}/scan`,"POST");
+    show({http_status: status, ...data});
+
+    if(status===200 && data.ok){
+      if(data.status==="confirmed"){
+        redeemBtn.disabled = false;
+        hint("confirmed ✅ กด Redeem ได้");
+        return;
+      }
+      if(data.status==="pending_confirm" && data.need_confirm){
+        redeemBtn.disabled = true;
+        hint("รอยืนยันจากผู้ซื้อ... (กำลัง polling)");
+        await pollUntilConfirmed(c);
+        return;
+      }
+      if(data.status==="redeemed"){
+        redeemBtn.disabled = true;
+        hint("redeemed ✅");
+        return;
+      }
+    }
+
+    if(status===409){
+      redeemBtn.disabled = true;
+      hint(`Conflict: ${(data.error||data.message)} (status=${data.status||""})`);
+      return;
+    }
+
+    if(status===401 && data.error==="POS_DEVICE_REVOKED"){
+      badge("bad","POS Revoked");
+      hint("เครื่องถูก revoke ให้ไปหน้า Settings แล้วใส่ token ใหม่");
+      return;
+    }
+
+    redeemBtn.disabled = true;
+    hint(`Error ${status} ${(data && (data.error||data.message)) || ""}`);
+  }
+
+  async function redeem(){
+    const c = codeEl.value.trim();
+    if(!c) return hint("ใส่ coupon code ก่อน");
+    hint("Redeeming...");
+    const {status, data} = await api(`/api/pos/coupons/${encodeURIComponent(c)}/redeem`,"POST");
+    show({http_status: status, ...data});
+
+    if(status===200 && data.ok){
+      redeemBtn.disabled = true;
+      hint("redeemed ✅ สำเร็จ");
+      return;
+    }
+
+    if(status===401 && data.error==="POS_DEVICE_REVOKED"){
+      badge("bad","POS Revoked");
+      hint("เครื่องถูก revoke ให้ไปหน้า Settings แล้วใส่ token ใหม่");
+      return;
+    }
+
+    hint(`Error ${status} ${(data && (data.error||data.message)) || ""}`);
+  }
+
+  async function pollUntilConfirmed(code){
+    const maxMs = 120000;
+    const intervalMs = 2000;
+    const started = Date.now();
+
+    while(Date.now() - started < maxMs){
+      const {status, data} = await api(`/api/pos/coupons/${encodeURIComponent(code)}`,"GET");
+      show({http_status: status, ...data});
+
+      if(status===200 && data.ok){
+        const st = data.coupon?.status;
+        if(st==="confirmed"){
+          redeemBtn.disabled = false;
+          hint("confirmed ✅ กด Redeem ได้");
+          return;
+        }
+        if(st==="redeemed"){
+          redeemBtn.disabled = true;
+          hint("redeemed ✅ (ถูกใช้ไปแล้ว)");
+          return;
+        }
+      }
+
+      await new Promise(r=>setTimeout(r, intervalMs));
+    }
+
+    hint("หมดเวลารอยืนยัน (timeout) — ให้ลูกค้ากดยืนยันใหม่ แล้วกด Scan อีกครั้ง");
+  }
+
+  clearBtn.addEventListener("click", ()=>{
+    codeEl.value = "";
+    redeemBtn.disabled = true;
+    hint("");
+    show({});
+  });
+
+  lookupBtn.addEventListener("click", lookup);
+  scanBtn.addEventListener("click", scan);
+  redeemBtn.addEventListener("click", redeem);
+
+  (async ()=>{
+    const ok = await checkPosMe();
+    if(!ok) return;
+    hint("พร้อมใช้งาน ✅");
+  })();
+</script>
+</body>
+</html>
