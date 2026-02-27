@@ -8,6 +8,13 @@ use App\Http\Controllers\Api\MerchantController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReviewController;
 
+use App\Http\Controllers\Api\CouponProductController;
+use App\Http\Controllers\Api\CouponController;
+use App\Http\Controllers\Api\PosCouponController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PosDeviceController;
+use App\Http\Controllers\Api\MerchantPosDeviceController;
+
 Route::get('/ping', fn () => response()->json(['ok' => true]));
 
 // referral
@@ -35,6 +42,35 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
+    // ✅ notifications (ต้องมี token)
+    Route::get('/me/notifications', [NotificationController::class, 'myNotifications']);
+
+    // --- ลูกค้า (My Coupons)
+    Route::get('/me/coupons', [CouponController::class, 'myCoupons']);
+    Route::post('/me/coupons/{code}/confirm', [CouponController::class, 'confirm']);
+
+    // --- ออกคูปอง (buyer)
+    Route::post('/products/{id}/coupons/issue', [CouponController::class, 'issue']);
+
+    // --- ร้านค้า ตั้งค่า “สินค้าเป็นคูปอง”
+    Route::post('/merchant/products/{id}/coupon-product', [CouponProductController::class, 'upsert']);
+    Route::get('/merchant/products/{id}/coupon-product', [CouponProductController::class, 'get']);
+
+    // --- POS Devices (merchant) create/list/rotate/revoke
+    Route::get('/merchant/pos-devices', [MerchantPosDeviceController::class, 'index']);
+    Route::post('/merchant/pos-devices', [MerchantPosDeviceController::class, 'store']);
+    Route::post('/merchant/pos-devices/{id}/rotate-token', [MerchantPosDeviceController::class, 'rotateToken']);
+    Route::post('/merchant/pos-devices/{id}/revoke', [MerchantPosDeviceController::class, 'revoke']);
+
+    // --- POS (ร้านค้า) scan / redeem
+    Route::get('/pos/me', [PosDeviceController::class, 'me']);
+    Route::get('/pos/coupons/{code}', [PosCouponController::class, 'lookup'])
+        ->middleware(['pos.device:pos:lookup']);
+    Route::post('/pos/coupons/{code}/scan', [PosCouponController::class, 'scan'])
+        ->middleware(['pos.device:pos:scan']);
+    Route::post('/pos/coupons/{code}/redeem', [PosCouponController::class, 'redeem'])
+        ->middleware(['pos.device:pos:redeem']);
+
     // merchant profile / onboarding
     Route::post('/merchant/apply', [MerchantController::class, 'apply']);
     Route::post('/merchant/kyc', [MerchantController::class, 'submitKyc']);
@@ -50,7 +86,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/merchant/products/{id}/variants', [ProductController::class, 'addVariant']);
     Route::patch('/merchant/variants/{id}/stock', [ProductController::class, 'updateStock']);
 
-    // ✅ product images (merchant) — ไม่ต้องเป็น admin
+    // product images (merchant)
     Route::post('/merchant/products/{id}/images', [ProductController::class, 'addImage']);
     Route::patch('/merchant/images/{imageId}', [ProductController::class, 'updateImage']);
     Route::delete('/merchant/images/{imageId}', [ProductController::class, 'deleteImage']);

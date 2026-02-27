@@ -24,3 +24,8 @@ Homestead.yaml
 Thumbs.db
 /database/database.sqlite
 /storage/logs
+# local backups (do not commit)
+.local_backups/
+database.sqlite.backup_*
+storage_app_backup_*.zip
+
