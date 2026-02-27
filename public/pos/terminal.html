@@ -40,6 +40,7 @@
 
       <div class="btns">
         <button id="lookupBtn">Lookup</button>
+        <button id="camBtn">Scan Camera</button>
         <button id="scanBtn" class="primary">Scan</button>
         <button id="redeemBtn" disabled>Redeem</button>
         <button id="clearBtn" class="danger">Clear</button>
@@ -47,7 +48,61 @@
 
       <div class="muted" id="hint" style="margin-top:10px"></div>
       <pre id="out">{}</pre>
+
+    <!-- Camera Scanner Modal -->
+    <div id="scanModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;">
+      <div style="max-width:560px;margin:0 auto;padding:16px;">
+        <div style="background:rgba(18,26,43,.96);border:1px solid #223055;border-radius:16px;padding:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+            <div style="font-weight:800">Scan QR / Barcode</div>
+            <button id="closeScanModal" style="border:1px solid #223055;background:rgba(255,255,255,.06);color:#e7eefc;padding:8px 10px;border-radius:12px;font-weight:700;cursor:pointer">ปิด</button>
+          </div>
+          <div style="color:#9fb0d0;font-size:13px;margin-top:6px">
+            ใช้กล้องหลัง (ถ้าเบราว์เซอร์รองรับ). ถ้าใช้ “ปืนยิงบาร์โค้ด” ให้โฟกัสช่อง Code แล้วยิงได้เลย
+          </div>
+          <div style="margin-top:10px;border-radius:14px;overflow:hidden;border:1px solid #223055;background:#000">
+            <video id="scanVideo" playsinline muted autoplay style="width:100%;height:320px;object-fit:cover"></video>
+          </div>
+          <div id="scanMsg" style="color:#9fb0d0;font-size:13px;margin-top:10px">กำลังเปิดกล้อง...</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+            <button id="toggleTorchBtn" style="border:1px solid #223055;background:rgba(255,255,255,.06);color:#e7eefc;padding:10px 12px;border-radius:12px;font-weight:700;cursor:pointer;display:none">ไฟฉาย</button>
+          </div>
+        </div>
+      </div>
     </div>
+
+    </div>
+
+    
+    <div class="card" id="devToolsCard" style="display:none">
+      <div style="font-weight:800">Dev Tools • ออกคูปองทดสอบ</div>
+      <div class="muted">โชว์เฉพาะเมื่อเปิดหน้านี้ด้วย <code>?dev=1</code></div>
+
+      <div style="margin-top:10px;display:grid;gap:10px">
+        <div>
+          <div class="muted" style="margin-bottom:6px">Buyer Phone</div>
+          <input id="devBuyerPhone" placeholder="0811111111" autocomplete="off" />
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:6px">Buyer Password</div>
+          <input id="devBuyerPass" placeholder="123456" type="password" autocomplete="off" />
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:6px">Product ID</div>
+          <input id="devProductId" placeholder="1" autocomplete="off" />
+        </div>
+
+        <div class="btns">
+          <button id="devLoginBuyerBtn">Login Buyer</button>
+          <button id="devIssueBtn" class="primary">Issue Test Coupon</button>
+          <button id="devClearBuyerBtn" class="danger">Clear Buyer Token</button>
+        </div>
+
+        <div class="muted" id="devBuyerHint"></div>
+        <pre id="devOut">{}</pre>
+      </div>
+    </div>
+
 
     <div class="card">
       <div style="font-weight:700">POS Token</div>
@@ -251,6 +306,216 @@
     if(!ok) return;
     hint("พร้อมใช้งาน ✅");
   })();
+
+  // --- Camera scan (BarcodeDetector) + barcode gun support ---
+  const camBtn = document.getElementById("camBtn");
+  const scanModal = document.getElementById("scanModal");
+  const closeScanModal = document.getElementById("closeScanModal");
+  const scanVideo = document.getElementById("scanVideo");
+  const scanMsg = document.getElementById("scanMsg");
+  const toggleTorchBtn = document.getElementById("toggleTorchBtn");
+
+  let scanStream = null;
+  let scanLoopOn = false;
+  let barcodeDetector = null;
+  let torchOn = false;
+
+  function normalizeScannedValue(raw){
+    if(!raw) return "";
+    raw = String(raw).trim();
+    // ถ้าเป็น URL ให้ดึงส่วนที่เหมือน coupon code
+    const m = raw.match(/(CP\d{6}-[A-Z0-9]{4,})/i);
+    if(m) return m[1];
+    return raw;
+  }
+
+  async function openScanModal(){
+    if(!navigator.mediaDevices?.getUserMedia){
+      scanMsg.textContent = "เบราว์เซอร์นี้ไม่รองรับกล้อง (getUserMedia). ให้ใช้ Chrome หรือใช้เครื่องยิงบาร์โค้ดแทน";
+      scanModal.style.display = "block";
+      return;
+    }
+
+    if("BarcodeDetector" in window){
+      try{
+        barcodeDetector = new BarcodeDetector({formats:["qr_code","code_128","code_39","ean_13","ean_8","itf"]});
+      }catch(e){
+        barcodeDetector = null;
+      }
+    }
+    if(!barcodeDetector){
+      scanMsg.textContent = "เบราว์เซอร์นี้ไม่รองรับ BarcodeDetector. แนะนำ Chrome/Android หรือใช้เครื่องยิงบาร์โค้ด";
+      scanModal.style.display = "block";
+      return;
+    }
+
+    scanModal.style.display = "block";
+    scanMsg.textContent = "กำลังเปิดกล้อง...";
+    torchOn = false;
+    toggleTorchBtn.style.display = "none";
+
+    try{
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio:false });
+      scanVideo.srcObject = scanStream;
+
+      const track = scanStream.getVideoTracks()[0];
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if(caps && caps.torch){
+        toggleTorchBtn.style.display = "inline-block";
+        toggleTorchBtn.textContent = "ไฟฉาย";
+        toggleTorchBtn.onclick = async ()=>{
+          try{
+            torchOn = !torchOn;
+            await track.applyConstraints({advanced:[{torch: torchOn}]});
+            toggleTorchBtn.textContent = torchOn ? "ปิดไฟฉาย" : "ไฟฉาย";
+          }catch(e){}
+        };
+      }
+
+      scanLoopOn = true;
+      scanMsg.textContent = "เล็ง QR/Barcode ให้อยู่ในกล้อง...";
+      scanLoop();
+    }catch(err){
+      scanMsg.textContent = "เปิดกล้องไม่สำเร็จ: " + (err?.message || err);
+    }
+  }
+
+  function closeScan(){
+    scanLoopOn = false;
+    if(scanStream){
+      scanStream.getTracks().forEach(t=>t.stop());
+      scanStream = null;
+    }
+    scanVideo.srcObject = null;
+    scanModal.style.display = "none";
+  }
+
+  async function scanLoop(){
+    if(!scanLoopOn) return;
+    try{
+      const codes = await barcodeDetector.detect(scanVideo);
+      if(codes && codes.length){
+        const raw = codes[0].rawValue || "";
+        const val = normalizeScannedValue(raw);
+        if(val){
+          closeScan();
+          codeEl.value = val;
+          hint("สแกนสำเร็จ ✅ กำลัง Scan...");
+          // auto call scan flow
+          scan();
+          return;
+        }
+      }
+    }catch(e){
+      // ignore scanning errors
+    }
+    requestAnimationFrame(scanLoop);
+  }
+
+  if(camBtn) camBtn.addEventListener("click", openScanModal);
+  if(closeScanModal) closeScanModal.addEventListener("click", closeScan);
+
+  // barcode gun (keyboard wedge): ยิงแล้วจบด้วย Enter → เรียก Scan ทันที
+  codeEl.addEventListener("keydown", (e)=>{
+    if(e.key === "Enter"){
+      e.preventDefault();
+      scan();
+    }
+  });
+
+  // ตั้งโฟกัสไว้เพื่อให้เครื่องยิงบาร์โค้ดพิมพ์เข้าได้ทันที
+  setTimeout(()=>{ try{ codeEl.focus(); }catch(e){} }, 300);
+
+
+  // --- Dev Tools: issue test coupon (buyer login + issue) ---
+  const devToolsCard = document.getElementById("devToolsCard");
+  const devBuyerPhone = document.getElementById("devBuyerPhone");
+  const devBuyerPass = document.getElementById("devBuyerPass");
+  const devProductId = document.getElementById("devProductId");
+  const devLoginBuyerBtn = document.getElementById("devLoginBuyerBtn");
+  const devIssueBtn = document.getElementById("devIssueBtn");
+  const devClearBuyerBtn = document.getElementById("devClearBuyerBtn");
+  const devBuyerHint = document.getElementById("devBuyerHint");
+  const devOut = document.getElementById("devOut");
+
+  const LS_BUYER_TOKEN = "buyer_token_dev";
+
+  function buyerToken(){ return (localStorage.getItem(LS_BUYER_TOKEN) || "").trim(); }
+  function setBuyerToken(t){ localStorage.setItem(LS_BUYER_TOKEN, (t||"").trim()); }
+  function clearBuyerToken(){ localStorage.removeItem(LS_BUYER_TOKEN); }
+
+  function devShow(x){ devOut.textContent = JSON.stringify(x, null, 2); }
+  function devHint(t){ devBuyerHint.textContent = t || ""; }
+
+  async function loginBuyer(){
+    const phone = (devBuyerPhone.value || "").trim();
+    const pass = (devBuyerPass.value || "").trim();
+    if(!phone || !pass){ devHint("ใส่เบอร์และรหัสผ่าน buyer ก่อน"); return; }
+
+    devHint("กำลัง login buyer...");
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: {"Accept":"application/json","Content-Type":"application/json"},
+      body: JSON.stringify({phone, password: pass})
+    });
+    const data = await res.json().catch(()=>({ok:false,error:"INVALID_JSON"}));
+    devShow({http_status: res.status, ...data});
+
+    if(res.status === 200 && data.token){
+      setBuyerToken(data.token);
+      devHint("Login buyer สำเร็จ ✅ token ถูกเก็บแล้ว");
+    } else {
+      devHint("Login buyer ไม่สำเร็จ");
+    }
+  }
+
+  async function issueTestCoupon(){
+    const t = buyerToken();
+    if(!t){ devHint("ยังไม่มี buyer token — กด Login Buyer ก่อน"); return; }
+
+    const pid = (devProductId.value || "1").trim() || "1";
+    devHint("กำลังออกคูปองทดสอบ...");
+    const res = await fetch(`/api/products/${encodeURIComponent(pid)}/coupons/issue`, {
+      method: "POST",
+      headers: {"Accept":"application/json","Authorization":"Bearer " + t}
+    });
+    const data = await res.json().catch(()=>({ok:false,error:"INVALID_JSON"}));
+    devShow({http_status: res.status, ...data});
+
+    if(res.status === 200 && data.coupon && data.coupon.code){
+      const code = data.coupon.code;
+      codeEl.value = code;
+      devHint("ออกคูปองสำเร็จ ✅ ใส่ code ให้อัตโนมัติแล้ว (กด Scan ได้เลย)");
+      // optional: auto lookup
+      try{ lookup(); }catch(e){}
+    } else {
+      devHint("ออกคูปองไม่สำเร็จ");
+    }
+  }
+
+  function initDevTools(){
+    const dev = new URLSearchParams(location.search).get("dev") === "1";
+    if(devToolsCard) devToolsCard.style.display = dev ? "block" : "none";
+    if(!dev) return;
+
+    // default values for test
+    if(devBuyerPhone && !devBuyerPhone.value) devBuyerPhone.value = "0811111111";
+    if(devBuyerPass && !devBuyerPass.value) devBuyerPass.value = "123456";
+    if(devProductId && !devProductId.value) devProductId.value = "1";
+
+    if(devLoginBuyerBtn) devLoginBuyerBtn.addEventListener("click", loginBuyer);
+    if(devIssueBtn) devIssueBtn.addEventListener("click", issueTestCoupon);
+    if(devClearBuyerBtn) devClearBuyerBtn.addEventListener("click", ()=>{
+      clearBuyerToken();
+      devHint("ล้าง buyer token แล้ว");
+      devShow({});
+    });
+
+    devHint(buyerToken() ? "มี buyer token แล้ว ✅ (กด Issue ได้เลย)" : "ยังไม่มี buyer token (กด Login Buyer)");
+  }
+
+  initDevTools();
+
 </script>
 </body>
 </html>
