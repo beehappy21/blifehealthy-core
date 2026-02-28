@@ -20,5 +20,5 @@ async function request(method,path,{query,json,body}={}){
   if(!res.ok){throw new Error(data.message||data.error||`HTTP ${res.status}`)}
   return data;
 }
-const api={get:(p,q)=>request('GET',p,{query:q}),post:(p,j)=>request('POST',p,{json:j}),patch:(p,j)=>request('PATCH',p,{json:j}),upload:(p,formData)=>request('POST',p,{body:formData})};
+const api={get:(p,q)=>request('GET',p,{query:q}),post:(p,j)=>request('POST',p,{json:j}),patch:(p,j)=>request('PATCH',p,{json:j}),delete:(p)=>request('DELETE',p,{}),upload:(p,formData)=>request('POST',p,{body:formData})};
 window.shopSettings=shopSettings;window.api=api;

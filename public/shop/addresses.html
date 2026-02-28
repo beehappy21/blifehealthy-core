@@ -1,0 +1,238 @@
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Address Book</title><link rel='stylesheet' href='assets/shop.css'></head><body>
+<div class='app'>
+  <div id='header'></div>
+
+  <div class='card'>
+    <div class='row between'>
+      <h3 style='margin:0'>สมุดที่อยู่</h3>
+      <button id='newAddressBtn' class='btn btn-ghost'>เพิ่มที่อยู่</button>
+    </div>
+    <p class='muted' style='margin-bottom:0'>จัดการที่อยู่สำหรับจัดส่งสินค้า</p>
+  </div>
+
+  <div class='card'>
+    <h4 id='formTitle'>เพิ่มที่อยู่ใหม่</h4>
+    <div class='grid'>
+      <input id='label' class='input' placeholder='label เช่น บ้าน, ที่ทำงาน'>
+      <input id='receiver_name' class='input' placeholder='receiver_name'>
+      <input id='receiver_phone' class='input' placeholder='receiver_phone'>
+      <input id='address_line1' class='input' placeholder='address_line1'>
+      <input id='address_line2' class='input' placeholder='address_line2 (optional)'>
+      <div class='grid grid-2'>
+        <input id='subdistrict' class='input' placeholder='subdistrict'>
+        <input id='district' class='input' placeholder='district'>
+      </div>
+      <div class='grid grid-2'>
+        <input id='province' class='input' placeholder='province'>
+        <input id='postcode' class='input' placeholder='postcode'>
+      </div>
+      <input id='country' class='input' placeholder='country' value='TH'>
+      <label class='row'>
+        <input id='is_default' type='checkbox'>
+        <span>ตั้งเป็นที่อยู่เริ่มต้น</span>
+      </label>
+      <div class='row'>
+        <button id='saveBtn' class='btn btn-primary'>บันทึก</button>
+        <button id='cancelEditBtn' class='btn btn-ghost' type='button'>ยกเลิกแก้ไข</button>
+      </div>
+    </div>
+  </div>
+
+  <div class='card'>
+    <h4>รายการที่อยู่</h4>
+    <div id='addressesList' class='grid'></div>
+  </div>
+</div>
+<div id='toast' class='toast'></div><div id='bottomNav'></div>
+<script src='assets/api.js'></script><script src='assets/app.js'></script><script>
+renderHeader('Address Book');
+renderBottomNav('account');
+
+let editingId=null;
+let addresses=[];
+
+if(requireAuth()) init();
+
+function init(){
+  saveBtn.onclick=saveAddress;
+  cancelEditBtn.onclick=resetForm;
+  newAddressBtn.onclick=resetForm;
+  loadAddresses();
+}
+
+async function loadAddresses(){
+  try{
+    const res=await api.get('/api/me/addresses');
+    addresses=Array.isArray(res.items)?res.items:[];
+    renderAddresses();
+  }catch(e){
+    showToast(e.message,'error');
+  }
+}
+
+function renderAddresses(){
+  addressesList.textContent='';
+  if(!addresses.length){
+    const empty=document.createElement('p');
+    empty.className='muted';
+    empty.textContent='ยังไม่มีที่อยู่';
+    addressesList.appendChild(empty);
+    return;
+  }
+
+  addresses.forEach((address)=>{
+    const card=document.createElement('div');
+    card.className='card';
+
+    const topRow=document.createElement('div');
+    topRow.className='row between';
+
+    const title=document.createElement('strong');
+    title.textContent=address.label||'ไม่ระบุชื่อ';
+
+    const badgeWrap=document.createElement('div');
+    if(address.is_default){
+      const badge=document.createElement('span');
+      badge.className='btn btn-ghost';
+      badge.style.padding='2px 8px';
+      badge.style.fontSize='12px';
+      badge.textContent='Default';
+      badgeWrap.appendChild(badge);
+    }
+
+    topRow.appendChild(title);
+    topRow.appendChild(badgeWrap);
+    card.appendChild(topRow);
+
+    card.appendChild(infoRow('ผู้รับ',address.receiver_name));
+    card.appendChild(infoRow('โทร',address.receiver_phone));
+    card.appendChild(infoRow('ที่อยู่',formatFullAddress(address)));
+
+    const actionRow=document.createElement('div');
+    actionRow.className='row';
+    actionRow.style.marginTop='8px';
+
+    const editBtn=document.createElement('button');
+    editBtn.className='btn btn-ghost';
+    editBtn.textContent='แก้ไข';
+    editBtn.onclick=()=>startEdit(address);
+
+    const deleteBtn=document.createElement('button');
+    deleteBtn.className='btn';
+    deleteBtn.style.background='#fee2e2';
+    deleteBtn.style.color='#991b1b';
+    deleteBtn.textContent='ลบ';
+    deleteBtn.onclick=()=>deleteAddress(address.id);
+
+    actionRow.appendChild(editBtn);
+    actionRow.appendChild(deleteBtn);
+    card.appendChild(actionRow);
+
+    addressesList.appendChild(card);
+  });
+}
+
+function infoRow(labelText,value){
+  const row=document.createElement('div');
+  row.className='row between';
+
+  const left=document.createElement('span');
+  left.className='muted';
+  left.textContent=labelText;
+
+  const right=document.createElement('span');
+  right.style.textAlign='right';
+  right.style.maxWidth='70%';
+  right.textContent=value||'-';
+
+  row.appendChild(left);
+  row.appendChild(right);
+  return row;
+}
+
+function formatFullAddress(a){
+  return [a.address_line1,a.address_line2,a.subdistrict,a.district,a.province,a.postcode,a.country].filter(Boolean).join(' ');
+}
+
+function readForm(){
+  return {
+    label:label.value.trim(),
+    receiver_name:receiver_name.value.trim(),
+    receiver_phone:receiver_phone.value.trim(),
+    address_line1:address_line1.value.trim(),
+    address_line2:address_line2.value.trim(),
+    subdistrict:subdistrict.value.trim(),
+    district:district.value.trim(),
+    province:province.value.trim(),
+    postcode:postcode.value.trim(),
+    country:(country.value||'TH').trim(),
+    is_default:is_default.checked,
+  };
+}
+
+function startEdit(address){
+  editingId=address.id;
+  setText(formTitle,'แก้ไขที่อยู่');
+  label.value=address.label||'';
+  receiver_name.value=address.receiver_name||'';
+  receiver_phone.value=address.receiver_phone||'';
+  address_line1.value=address.address_line1||'';
+  address_line2.value=address.address_line2||'';
+  subdistrict.value=address.subdistrict||'';
+  district.value=address.district||'';
+  province.value=address.province||'';
+  postcode.value=address.postcode||'';
+  country.value=address.country||'TH';
+  is_default.checked=Boolean(address.is_default);
+}
+
+function resetForm(){
+  editingId=null;
+  setText(formTitle,'เพิ่มที่อยู่ใหม่');
+  label.value='';
+  receiver_name.value='';
+  receiver_phone.value='';
+  address_line1.value='';
+  address_line2.value='';
+  subdistrict.value='';
+  district.value='';
+  province.value='';
+  postcode.value='';
+  country.value='TH';
+  is_default.checked=false;
+}
+
+async function saveAddress(){
+  const payload=readForm();
+  if(!payload.receiver_name||!payload.receiver_phone||!payload.address_line1){
+    showToast('กรุณากรอกข้อมูลที่จำเป็น','error');
+    return;
+  }
+
+  try{
+    if(editingId){
+      await api.patch(`/api/me/addresses/${editingId}`,payload);
+      showToast('บันทึกการแก้ไขแล้ว','success');
+    }else{
+      await api.post('/api/me/addresses',payload);
+      showToast('เพิ่มที่อยู่แล้ว','success');
+    }
+    resetForm();
+    await loadAddresses();
+  }catch(e){
+    showToast(e.message,'error');
+  }
+}
+
+async function deleteAddress(id){
+  if(!confirm('ยืนยันการลบที่อยู่นี้?')) return;
+  try{
+    await api.delete(`/api/me/addresses/${id}`);
+    showToast('ลบที่อยู่แล้ว','success');
+    if(editingId===id) resetForm();
+    await loadAddresses();
+  }catch(e){
+    showToast(e.message,'error');
+  }
+}
+</script></body></html>
