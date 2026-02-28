@@ -55,3 +55,12 @@
 
 ## POS/Coupon safety
 - งานนี้ไม่แก้ controller/logic ของ `pos/*`, `coupon*`, `device*`.
+
+## Security note: review rendering XSS hardening
+- Reviews are now rendered with DOM APIs (`createElement` + `textContent`) instead of injecting API fields into `innerHTML`.
+- Review body preserves line breaks via `white-space: pre-wrap`, while still treating all review content as plain text.
+
+### Manual security test
+1. Submit a review with title or body containing: `<img src=x onerror=alert(1)>`.
+2. Reload `product.html?id=...` and open the Reviews section.
+3. Confirm the payload is shown as plain text and no alert/script executes.
