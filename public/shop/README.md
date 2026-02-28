@@ -64,3 +64,6 @@
 1. Submit a review with title or body containing: `<img src=x onerror=alert(1)>`.
 2. Reload `product.html?id=...` and open the Reviews section.
 3. Confirm the payload is shown as plain text and no alert/script executes.
+
+## Codex flow test
+This line was added by Codex to validate the “Copy git apply” workflow.
