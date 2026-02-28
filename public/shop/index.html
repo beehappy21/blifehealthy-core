@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Shop Home</title><link rel='stylesheet' href='assets/shop.css'></head>
+<body><div class='app'><div id='header'></div><div class='card'><input id='search' class='input' placeholder='ค้นหาสินค้า'></div><div id='list'></div></div><div id='toast' class='toast'></div><div id='bottomNav'></div>
+<script src='assets/api.js'></script><script src='assets/app.js'></script><script>
+renderHeader('Wellness Shop');renderBottomNav('home');if(requireMerchantId()) load();
+async function load(){const list=document.getElementById('list');list.innerHTML='<div class="loading">Loading...</div>';try{const d=await api.get(`/api/shop/${shopSettings.getMerchantId()}/products`);window.items=d.items||[];render(window.items)}catch(e){list.innerHTML=`<div class='error'>${e.message}</div>`}}
+function render(items){const q=(document.getElementById('search').value||'').toLowerCase();const rows=items.filter(i=>!q||i.name.toLowerCase().includes(q));document.getElementById('list').innerHTML=rows.map(i=>`<div class='card'><img class='product-img' src='${i.cover_url||''}'><h3>${i.name}</h3><div class='muted'>${i.description||''}</div><a href='product.html?id=${i.id}' class='btn btn-primary' style='display:inline-block;margin-top:8px'>ดูสินค้า</a></div>`).join('')||"<div class='card'>ไม่พบสินค้า</div>"}
+document.getElementById('search').addEventListener('input',()=>render(window.items||[]));
+</script></body></html>

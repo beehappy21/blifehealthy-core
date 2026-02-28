@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Order</title><link rel='stylesheet' href='assets/shop.css'></head><body>
+<div class='app'><div id='header'></div><div id='body'></div><div class='card'><h3>อัปโหลดสลิป</h3><input class='input' type='file' id='slip'><input class='input' id='amount' placeholder='จำนวนเงิน'><button id='uploadBtn' class='btn btn-primary'>อัปโหลด</button></div></div><div id='toast' class='toast'></div><div id='bottomNav'></div>
+<script src='assets/api.js'></script><script src='assets/app.js'></script><script>
+renderHeader('Order Detail');renderBottomNav('orders');const id=qsi('id');if(requireAuth())init();
+async function init(){await load();uploadBtn.onclick=upload}
+async function load(){try{const d=await api.get(`/api/orders/${id}`);body.innerHTML=`<div class='card'><div class='row between'><b>${d.order.order_no}</b><span>${d.order.status}</span></div><div>ยอดรวม ${formatMoney(d.order.total)}</div><hr>${(d.items||[]).map(i=>`<div class='row between'><span>${i.product_name||i.sku} x ${i.qty}</span><span>${formatMoney(i.line_total)}</span></div>`).join('')}<div>${d.payment_slip?`สลิปล่าสุด: <a href='${d.payment_slip.image_url}' target='_blank'>เปิดรูป</a>`:'ยังไม่มีสลิป'}</div></div>`}catch(e){body.innerHTML=`<div class='error'>${e.message}</div>`}}
+async function upload(){if(!slip.files[0])return showToast('เลือกไฟล์ก่อน','error');const f=new FormData();f.append('slip',slip.files[0]);if(amount.value)f.append('amount',amount.value);try{await api.upload(`/api/orders/${id}/payment-slip`,f);showToast('อัปโหลดสำเร็จ','success');load()}catch(e){showToast(e.message,'error')}}
+</script></body></html>

@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Orders</title><link rel='stylesheet' href='assets/shop.css'></head><body>
+<div class='app'><div id='header'></div><div id='list'></div></div><div id='toast' class='toast'></div><div id='bottomNav'></div>
+<script src='assets/api.js'></script><script src='assets/app.js'></script><script>
+renderHeader('My Orders');renderBottomNav('orders');if(requireAuth())load();
+async function load(){list.innerHTML='<div class="loading">Loading...</div>';try{const d=await api.get('/api/orders');list.innerHTML=(d.items||[]).map(o=>`<a class='card' style='display:block;text-decoration:none;color:inherit' href='order.html?id=${o.id}'><div class='row between'><b>${o.order_no}</b><span>${o.status}</span></div><div class='muted'>${formatMoney(o.total)}</div></a>`).join('')||"<div class='card'>ยังไม่มีออเดอร์</div>"}catch(e){list.innerHTML=`<div class='error'>${e.message}</div>`}}
+</script></body></html>

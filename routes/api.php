@@ -14,6 +14,8 @@ use App\Http\Controllers\Api\PosCouponController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PosDeviceController;
 use App\Http\Controllers\Api\MerchantPosDeviceController;
+use App\Http\Controllers\Api\AddressController;
+use App\Http\Controllers\Api\OrderController;
 
 Route::get('/ping', fn () => response()->json(['ok' => true]));
 
@@ -71,6 +73,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/pos/coupons/{code}/redeem', [PosCouponController::class, 'redeem'])
         ->middleware(['pos.device:pos:redeem']);
 
+
+    // --- eCommerce customer addresses
+    Route::get('/me/addresses', [AddressController::class, 'index']);
+    Route::post('/me/addresses', [AddressController::class, 'store']);
+    Route::patch('/me/addresses/{id}', [AddressController::class, 'update']);
+    Route::delete('/me/addresses/{id}', [AddressController::class, 'destroy']);
+
+    // --- eCommerce orders
+    Route::post('/orders', [OrderController::class, 'store']);
+    Route::get('/orders', [OrderController::class, 'index']);
+    Route::get('/orders/{id}', [OrderController::class, 'show']);
+    Route::post('/orders/{id}/payment-slip', [OrderController::class, 'uploadSlip']);
     // merchant profile / onboarding
     Route::post('/merchant/apply', [MerchantController::class, 'apply']);
     Route::post('/merchant/kyc', [MerchantController::class, 'submitKyc']);
