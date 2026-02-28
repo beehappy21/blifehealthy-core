@@ -1,0 +1,52 @@
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>My Account</title><link rel='stylesheet' href='assets/shop.css'></head><body>
+<div class='app'>
+  <div id='header'></div>
+  <div class='card'>
+    <h3>ข้อมูลสมาชิก</h3>
+    <div class='row between'><span class='muted'>ชื่อ</span><strong id='nameText'>-</strong></div>
+    <div class='row between'><span class='muted'>เบอร์โทร</span><strong id='phoneText'>-</strong></div>
+    <div class='row between'><span class='muted'>อีเมล</span><strong id='emailText'>-</strong></div>
+    <div class='row between'><span class='muted'>รหัสสมาชิก</span><strong id='memberCodeText'>-</strong></div>
+    <div class='row between'><span class='muted'>บทบาท</span><strong id='roleText'>-</strong></div>
+    <div class='row between'><span class='muted'>สถานะ</span><strong id='statusText'>-</strong></div>
+  </div>
+
+  <div class='card'>
+    <h3>เมนูของฉัน</h3>
+    <a href='addresses.html' class='btn btn-ghost' style='display:block;text-decoration:none;margin-bottom:8px'>ไปหน้า ที่อยู่ของฉัน</a>
+    <a href='orders.html' class='btn btn-ghost' style='display:block;text-decoration:none;margin-bottom:8px'>ไปหน้า ออเดอร์ของฉัน</a>
+    <a href='coupons.html' class='btn btn-ghost' style='display:block;text-decoration:none;margin-bottom:8px'>ไปหน้า คูปองของฉัน</a>
+    <a href='notifications.html' class='btn btn-ghost' style='display:block;text-decoration:none'>ไปหน้า การแจ้งเตือน</a>
+  </div>
+
+  <div class='card'>
+    <button id='logoutBtn' class='btn btn-primary'>Logout</button>
+  </div>
+</div>
+<div id='toast' class='toast'></div><div id='bottomNav'></div>
+<script src='assets/api.js'></script><script src='assets/app.js'></script><script>
+renderHeader('My Account');
+renderBottomNav('account');
+if(requireAuth()) loadProfile();
+logoutBtn.onclick=logout;
+
+async function loadProfile(){
+  try{
+    const me=await api.get('/api/me');
+    setText(nameText,me.name||'-');
+    setText(phoneText,me.phone||'-');
+    setText(emailText,me.email||'-');
+    setText(memberCodeText,me.member_code||'-');
+    setText(roleText,me.role||'-');
+    setText(statusText,me.status||'-');
+  }catch(e){
+    showToast(e.message,'error');
+  }
+}
+
+async function logout(){
+  try{await api.post('/api/auth/logout',{});}catch(e){showToast(e.message,'error');}
+  shopSettings.setToken('');
+  location.href='account.html';
+}
+</script></body></html>

@@ -15,7 +15,7 @@
 </div><div id='toast' class='toast'></div><div id='bottomNav'></div>
 <script src='assets/api.js'></script><script src='assets/app.js'></script><script>
 renderHeader('Account');renderBottomNav('account');loginBtn.onclick=login;meBtn.onclick=me;logoutBtn.onclick=logout;
-async function login(){try{const d=await api.post('/api/auth/login',{phone:phone.value,password:password.value});shopSettings.setToken(d.token);showToast('login success','success')}catch(e){showToast(e.message,'error')}}
+async function login(){try{const d=await api.post('/api/auth/login',{phone:phone.value,password:password.value});shopSettings.setToken(d.token);showToast('login success','success');setTimeout(()=>location.href='my-account.html',250)}catch(e){showToast(e.message,'error')}}
 async function me(){try{meBox.textContent=JSON.stringify(await api.get('/api/me'),null,2)}catch(e){showToast(e.message,'error')}}
 async function logout(){try{await api.post('/api/auth/logout',{});shopSettings.setToken('');showToast('logout success','success')}catch(e){showToast(e.message,'error')}}
 </script></body></html>
