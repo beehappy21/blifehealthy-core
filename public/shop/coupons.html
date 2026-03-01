@@ -59,7 +59,7 @@ function createActionButtons(coupon){
 
   // IMPORTANT: อย่าเดา endpoint เอง
   // เปิดเป็น true ต่อเมื่อยืนยันแล้วว่า backend มี route /api/me/coupons/{code}/confirm
-  const hasConfirmEndpoint=false;
+  const hasConfirmEndpoint=true;
 
   if(hasConfirmEndpoint && canConfirmCoupon(coupon)){
     const confirmBtn=document.createElement('button');
