@@ -17,6 +17,9 @@ use App\Http\Controllers\Api\MerchantPosDeviceController;
 use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\MerchantPaymentSlipController;
+use App\Http\Controllers\Api\MerchantOrderController;
+use App\Http\Controllers\Api\AdminPaymentSlipController;
+use App\Http\Controllers\Api\AdminOrderController;
 
 Route::get('/ping', fn () => response()->json(['ok' => true]));
 
@@ -91,6 +94,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/merchant/payment-slips', [MerchantPaymentSlipController::class, 'index']);
     Route::post('/merchant/payment-slips/{id}/approve', [MerchantPaymentSlipController::class, 'approve']);
     Route::post('/merchant/payment-slips/{id}/reject', [MerchantPaymentSlipController::class, 'reject']);
+
+    // --- merchant orders v1
+    Route::get('/merchant/orders', [MerchantOrderController::class, 'index']);
+    Route::get('/merchant/orders/{id}', [MerchantOrderController::class, 'show']);
+    Route::post('/merchant/orders/{id}/status', [MerchantOrderController::class, 'updateStatus']);
+    Route::post('/merchant/orders/{id}/shipment', [MerchantOrderController::class, 'upsertShipment']);
+
     // merchant profile / onboarding
     Route::post('/merchant/apply', [MerchantController::class, 'apply']);
     Route::post('/merchant/kyc', [MerchantController::class, 'submitKyc']);
@@ -119,6 +129,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('admin')->group(function () {
         Route::post('/admin/merchant/review', [MerchantController::class, 'adminReview']);
         Route::get('/admin/merchant/{merchantId}', [MerchantController::class, 'adminMerchantDetail']);
+
+        Route::get('/admin/payment-slips', [AdminPaymentSlipController::class, 'index']);
+        Route::post('/admin/payment-slips/{id}/approve', [AdminPaymentSlipController::class, 'approve']);
+        Route::post('/admin/payment-slips/{id}/reject', [AdminPaymentSlipController::class, 'reject']);
+
+        Route::get('/admin/orders', [AdminOrderController::class, 'index']);
+        Route::get('/admin/orders/{id}', [AdminOrderController::class, 'show']);
+        Route::post('/admin/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
     });
 
 });

@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin Payment Slips</title>
+  <link rel="stylesheet" href="assets/shop.css">
+  <style>
+    .toolbar{display:flex;gap:8px;margin:12px 0}
+    .toolbar select{padding:8px;border:1px solid #d1d5db;border-radius:8px}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .actions input{flex:1;min-width:220px;padding:8px;border:1px solid #d1d5db;border-radius:8px}
+    .slip-image{max-width:100%;border:1px solid #e5e7eb;border-radius:12px}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div id="header"></div>
+  <div class="toolbar">
+    <select id="statusFilter">
+      <option value="">ทุกสถานะ</option>
+      <option value="submitted">submitted</option>
+      <option value="approved">approved</option>
+      <option value="rejected">rejected</option>
+    </select>
+    <button id="searchBtn" class="btn">โหลด</button>
+  </div>
+  <div id="list"></div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="assets/api.js"></script>
+<script src="assets/app.js"></script>
+<script>
+renderHeader('Admin Slip Review v1');
+const listEl=document.getElementById('list');
+if(requireAuth()) load();
+document.getElementById('searchBtn').addEventListener('click',load);
+
+function normalizeImageUrl(url){
+  if(!url) return '';
+  if(url.startsWith('http://')||url.startsWith('https://')) return url;
+  if(url.startsWith('/')) return shopSettings.getBaseUrl().replace(/\/$/,'') + url;
+  return shopSettings.getBaseUrl().replace(/\/$/,'') + '/storage/' + url.replace(/^\/+/, '');
+}
+
+async function load(){
+  listEl.innerHTML='';
+  const loading=document.createElement('div');loading.className='loading';loading.textContent='Loading...';listEl.appendChild(loading);
+  try{
+    const d=await api.get('/api/admin/payment-slips',{status:document.getElementById('statusFilter').value||undefined});
+    const items=d.items||[];
+    listEl.innerHTML='';
+    if(!items.length){const empty=document.createElement('div');empty.className='card';empty.textContent='ไม่มีสลิป';listEl.appendChild(empty);return;}
+
+    items.forEach((it)=>{
+      const card=document.createElement('div');card.className='card';
+      const top=document.createElement('div');top.className='row between';
+      const b=document.createElement('b');b.textContent=it.order_no||`#${it.order_id}`;
+      const s=document.createElement('span');s.textContent=it.status||'-';
+      top.append(b,s);card.append(top);
+
+      const m1=document.createElement('div');m1.className='muted';m1.textContent=`Merchant: ${it.merchant_shop_name||'-'}`;card.append(m1);
+      const m2=document.createElement('div');m2.className='muted';m2.textContent=`ยอดโอน: ${formatMoney(it.amount)} | ออเดอร์: ${formatMoney(it.order_total)}`;card.append(m2);
+
+      const imgUrl=normalizeImageUrl(it.image_url);
+      if(imgUrl){const a=document.createElement('a');a.href=imgUrl;a.target='_blank';const img=document.createElement('img');img.className='slip-image';img.src=imgUrl;img.alt='slip';a.append(img);card.append(a);}
+
+      const actions=document.createElement('div');actions.className='actions';
+      const note=document.createElement('input');note.placeholder='หมายเหตุ';
+      const approve=document.createElement('button');approve.className='btn';approve.textContent='Approve';
+      approve.addEventListener('click',()=>review(it.id,'approve',note.value.trim()));
+      const reject=document.createElement('button');reject.className='btn';reject.textContent='Reject';
+      reject.addEventListener('click',()=>review(it.id,'reject',note.value.trim()));
+      actions.append(note,approve,reject);card.append(actions);
+      listEl.appendChild(card);
+    });
+  }catch(e){listEl.innerHTML='';const err=document.createElement('div');err.className='error';err.textContent=e.message;listEl.append(err)}
+}
+
+async function review(id,action,note){
+  try{
+    if(action==='reject'&&!note){showToast('Reject ต้องมี note','error');return;}
+    await api.post(`/api/admin/payment-slips/${id}/${action}`,{note:note||null});
+    showToast('บันทึกสำเร็จ','success');
+    load();
+  }catch(e){showToast(e.message,'error');}
+}
+</script>
+</body>
+</html>

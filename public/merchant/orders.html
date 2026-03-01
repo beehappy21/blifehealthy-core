@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Merchant Orders v1</title>
+  <link rel="stylesheet" href="assets/shop.css">
+  <style>
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+    .toolbar input,.toolbar select{padding:8px;border:1px solid #d1d5db;border-radius:8px}
+    .toolbar input{flex:1;min-width:180px}
+    .card-link{text-decoration:none;color:inherit;display:block}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div id="header"></div>
+  <div class="toolbar">
+    <select id="statusFilter">
+      <option value="">ทุกสถานะ</option>
+      <option>WAITING_PAYMENT</option>
+      <option>PAYMENT_REVIEW</option>
+      <option>PAYMENT_REJECTED</option>
+      <option>PAID</option>
+      <option>SHIPPING_CREATED</option>
+      <option>SHIPPED</option>
+      <option>CANCELLED</option>
+    </select>
+    <input id="qFilter" type="text" placeholder="ค้นหาเลขออเดอร์/tracking">
+    <button id="searchBtn" class="btn">ค้นหา</button>
+  </div>
+  <div id="list"></div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="assets/api.js"></script>
+<script src="assets/app.js"></script>
+<script>
+renderHeader('Merchant Orders v1');
+const listEl=document.getElementById('list');
+const statusEl=document.getElementById('statusFilter');
+const qEl=document.getElementById('qFilter');
+if(requireAuth()) loadOrders();
+
+document.getElementById('searchBtn').addEventListener('click', loadOrders);
+
+function createTextRow(label, value){
+  const row=document.createElement('div');
+  row.className='muted';
+  row.textContent=`${label}: ${value||'-'}`;
+  return row;
+}
+
+async function loadOrders(){
+  listEl.innerHTML='';
+  const loading=document.createElement('div');
+  loading.className='loading';
+  loading.textContent='Loading...';
+  listEl.appendChild(loading);
+
+  try{
+    const data=await api.get('/api/merchant/orders',{status:statusEl.value||undefined,q:qEl.value.trim()||undefined});
+    const items=data.items||[];
+    listEl.innerHTML='';
+
+    if(!items.length){
+      const empty=document.createElement('div');
+      empty.className='card';
+      empty.textContent='ยังไม่มีออเดอร์';
+      listEl.appendChild(empty);
+      return;
+    }
+
+    items.forEach((item)=>{
+      const link=document.createElement('a');
+      link.className='card card-link';
+      link.href=`order.html?id=${encodeURIComponent(item.id)}`;
+
+      const top=document.createElement('div');
+      top.className='row between';
+      const code=document.createElement('b');
+      code.textContent=item.order_no || `#${item.id}`;
+      const status=document.createElement('span');
+      status.textContent=item.status || '-';
+      top.append(code,status);
+
+      link.append(top);
+      link.append(createTextRow('ยอดรวม', formatMoney(item.total)));
+      link.append(createTextRow('Slip', item.payment_slip_status || 'none'));
+      link.append(createTextRow('Tracking', item.shipment_tracking_no || '-'));
+      listEl.appendChild(link);
+    });
+  }catch(e){
+    listEl.innerHTML='';
+    const err=document.createElement('div');
+    err.className='error';
+    err.textContent=e.message;
+    listEl.appendChild(err);
+  }
+}
+</script>
+</body>
+</html>
