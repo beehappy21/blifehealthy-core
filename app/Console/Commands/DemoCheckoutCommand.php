@@ -88,22 +88,9 @@ class DemoCheckoutCommand extends Command
     private function upsertUser(string $email, string $password, string $namePrefix, string $phonePrefix, MemberCodeGenerator $gen): User
     {
         $existing = User::where('email', $email)->first();
-        if ($existing) {
-            $data = $this->filter('users', [
-                'password_hash' => Hash::make($password),
-                'password' => Hash::make($password),
-                'status' => 'active',
-                'updated_at' => now(),
-            ]);
-            $existing->forceFill($data)->save();
-            return $existing;
-        }
 
-        $data = $this->filter('users', [
-            'member_code' => $gen->generate(),
+        $attrs = [
             'name' => $namePrefix,
-            'phone' => $this->generateUniquePhone($phonePrefix),
-            'email' => $email,
             'password_hash' => Hash::make($password),
             'password' => Hash::make($password),
             'status' => 'active',
@@ -112,13 +99,38 @@ class DemoCheckoutCommand extends Command
             'ref_status' => 'DEFAULTED',
             'ref_source' => 'manual',
             'ref_locked_at' => now(),
-            'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ];
 
-        $u = new User();
-        $u->forceFill($data)->save();
-        return $u;
+        if ($existing) {
+            if (empty($existing->phone)) {
+                $attrs['phone'] = $this->generateUniquePhone($phonePrefix);
+            }
+            if (empty($existing->email) && $email !== '') {
+                $attrs['email'] = $email;
+            }
+
+            $existing->forceFill($this->filter('users', $attrs))->save();
+
+            return $existing;
+        }
+
+        $memberCode = $gen->generate();
+        while (User::where('member_code', $memberCode)->exists()) {
+            $memberCode = $gen->generate();
+        }
+
+        $user = User::updateOrCreate(
+            ['member_code' => $memberCode],
+            $this->filter('users', array_merge($attrs, [
+                'member_code' => $memberCode,
+                'phone' => $this->generateUniquePhone($phonePrefix),
+                'email' => $email,
+                'created_at' => now(),
+            ]))
+        );
+
+        return $user;
     }
 
     private function generateUniquePhone(string $prefix): string
