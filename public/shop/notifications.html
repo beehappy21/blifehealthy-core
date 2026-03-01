@@ -1,0 +1,92 @@
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Notifications</title><link rel='stylesheet' href='assets/shop.css'></head><body>
+<div class='app'>
+  <div id='header'></div>
+  <div id='content'></div>
+</div>
+<div id='toast' class='toast'></div><div id='bottomNav'></div>
+<script src='assets/api.js'></script><script src='assets/app.js'></script><script>
+renderHeader('Notifications');
+renderBottomNav('account');
+const content=document.getElementById('content');
+if(requireAuth()) loadNotifications();
+
+function normalizeItems(payload){
+  if(Array.isArray(payload)) return payload;
+  if(payload && Array.isArray(payload.items)) return payload.items;
+  if(payload && Array.isArray(payload.data)) return payload.data;
+  if(payload && Array.isArray(payload.notifications)) return payload.notifications;
+  return [];
+}
+
+function firstFilled(values, fallback){
+  for(const value of values){
+    if(value!==null && value!==undefined && String(value).trim()!=='') return String(value);
+  }
+  return fallback;
+}
+
+function createLine(label, value){
+  const row=document.createElement('div');
+  row.className='row between';
+
+  const left=document.createElement('span');
+  left.className='muted';
+  left.textContent=label;
+
+  const right=document.createElement('span');
+  right.textContent=value;
+
+  row.appendChild(left);
+  row.appendChild(right);
+  return row;
+}
+
+function createNotificationCard(item){
+  const card=document.createElement('div');
+  card.className='card';
+
+  const title=document.createElement('h3');
+  title.textContent=firstFilled([item.title,item.type,item.subject],'Notification');
+  card.appendChild(title);
+
+  const body=document.createElement('div');
+  body.textContent=firstFilled([item.body,item.message,item.text],'');
+  card.appendChild(body);
+
+  const createdAt=firstFilled([item.created_at,item.sent_at],'');
+  if(createdAt){
+    card.appendChild(createLine('วันที่', createdAt));
+  }
+
+  return card;
+}
+
+function showSingleCard(message){
+  content.replaceChildren();
+  const card=document.createElement('div');
+  card.className='card';
+  card.textContent=message;
+  content.appendChild(card);
+}
+
+async function loadNotifications(){
+  showSingleCard('Loading...');
+  try{
+    const response=await api.get('/api/me/notifications');
+    const items=normalizeItems(response);
+
+    if(items.length===0){
+      showSingleCard('ยังไม่มีการแจ้งเตือน');
+      return;
+    }
+
+    content.replaceChildren();
+    for(const item of items){
+      content.appendChild(createNotificationCard(item||{}));
+    }
+  }catch(e){
+    showToast(e.message,'error');
+    showSingleCard('โหลดการแจ้งเตือนไม่สำเร็จ');
+  }
+}
+</script></body></html>
