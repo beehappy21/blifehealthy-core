@@ -27,7 +27,6 @@
 renderHeader('Slip Review v1');
 if (requireAuth()) load();
 
-function escapeHtml(v){return String(v||'').replace(/[&<>'"]/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[s]))}
 function normalizeImageUrl(url){
   if(!url) return '';
   if(url.startsWith('http://')||url.startsWith('https://')) return url;
@@ -35,28 +34,95 @@ function normalizeImageUrl(url){
   return shopSettings.getBaseUrl().replace(/\/$/,'') + '/storage/' + url.replace(/^\/+/, '');
 }
 
+function clearNode(el){while(el.firstChild){el.removeChild(el.firstChild);}}
+
+function createMuted(text){
+  const div=document.createElement('div');
+  div.className='muted';
+  div.textContent=text;
+  return div;
+}
+
 async function load(){
-  list.innerHTML='<div class="loading">Loading...</div>';
+  clearNode(list);
+  const loading=document.createElement('div');
+  loading.className='loading';
+  loading.textContent='Loading...';
+  list.appendChild(loading);
+
   try{
-    const d=await api.get('/api/merchant/payment-slips',{status:'pending'});
+    const d=await api.get('/api/merchant/payment-slips',{status:'all'});
     const items=d.items||[];
-    if(!items.length){list.innerHTML="<div class='card'>ไม่มีสลิปรอรีวิว</div>";return;}
-    list.innerHTML=items.map(it=>{
-      const img=normalizeImageUrl(it.image_url);
-      return `<div class='card' id='slip-${it.id}'>
-        <div class='row between'><b>${escapeHtml(it.order_no||('-'+it.order_id))}</b><span>${escapeHtml(it.slip_status)}</span></div>
-        <div class='muted'>ยอดโอน: ${formatMoney(it.amount)} | Order: ${formatMoney(it.order_total)}</div>
-        <div class='muted'>โอนเมื่อ: ${escapeHtml(it.transfer_at||'-')}</div>
-        ${img?`<div style='margin-top:10px'><a href='${img}' target='_blank'><img class='slip-image' src='${img}' alt='slip ${it.id}'></a></div>`:""}
-        <div class='actions'>
-          <input id='note-${it.id}' type='text' placeholder='หมายเหตุ (จำเป็นเมื่อ reject)'>
-          <button class='btn btn-approve' onclick='approveSlip(${it.id})'>Approve</button>
-          <button class='btn btn-reject' onclick='rejectSlip(${it.id})'>Reject</button>
-        </div>
-      </div>`;
-    }).join('');
+    clearNode(list);
+
+    if(!items.length){
+      const empty=document.createElement('div');
+      empty.className='card';
+      empty.textContent='ไม่มีสลิป';
+      list.appendChild(empty);
+      return;
+    }
+
+    items.forEach((it)=>{
+      const card=document.createElement('div');
+      card.className='card';
+      card.id=`slip-${it.id}`;
+
+      const top=document.createElement('div');
+      top.className='row between';
+      const title=document.createElement('b');
+      title.textContent=it.order_no || ('#'+it.order_id);
+      const status=document.createElement('span');
+      status.textContent=it.slip_status || '-';
+      top.append(title,status);
+      card.appendChild(top);
+
+      card.appendChild(createMuted(`ยอดโอน: ${formatMoney(it.amount)} | Order: ${formatMoney(it.order_total)}`));
+      card.appendChild(createMuted(`โอนเมื่อ: ${it.transfer_at || '-'}`));
+
+      const imgUrl=normalizeImageUrl(it.image_url);
+      if(imgUrl){
+        const wrap=document.createElement('div');
+        wrap.style.marginTop='10px';
+        const anchor=document.createElement('a');
+        anchor.href=imgUrl;
+        anchor.target='_blank';
+        const img=document.createElement('img');
+        img.className='slip-image';
+        img.src=imgUrl;
+        img.alt=`slip ${it.id}`;
+        anchor.appendChild(img);
+        wrap.appendChild(anchor);
+        card.appendChild(wrap);
+      }
+
+      const actions=document.createElement('div');
+      actions.className='actions';
+      const note=document.createElement('input');
+      note.id=`note-${it.id}`;
+      note.type='text';
+      note.placeholder='หมายเหตุ (จำเป็นเมื่อ reject)';
+
+      const approve=document.createElement('button');
+      approve.className='btn btn-approve';
+      approve.textContent='Approve';
+      approve.addEventListener('click',()=>approveSlip(it.id));
+
+      const reject=document.createElement('button');
+      reject.className='btn btn-reject';
+      reject.textContent='Reject';
+      reject.addEventListener('click',()=>rejectSlip(it.id));
+
+      actions.append(note,approve,reject);
+      card.appendChild(actions);
+      list.appendChild(card);
+    });
   }catch(e){
-    list.innerHTML=`<div class='error'>${escapeHtml(e.message)}</div>`;
+    clearNode(list);
+    const err=document.createElement('div');
+    err.className='error';
+    err.textContent=e.message;
+    list.appendChild(err);
   }
 }
 
@@ -65,7 +131,7 @@ async function approveSlip(id){
   try{
     await api.post(`/api/merchant/payment-slips/${id}/approve`,{note:note||null});
     showToast('Approve สำเร็จ','success');
-    document.getElementById(`slip-${id}`)?.remove();
+    load();
   }catch(e){showToast(e.message,'error');}
 }
 
@@ -75,7 +141,7 @@ async function rejectSlip(id){
   try{
     await api.post(`/api/merchant/payment-slips/${id}/reject`,{note});
     showToast('Reject สำเร็จ','success');
-    document.getElementById(`slip-${id}`)?.remove();
+    load();
   }catch(e){showToast(e.message,'error');}
 }
 </script>

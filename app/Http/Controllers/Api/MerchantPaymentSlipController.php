@@ -14,6 +14,7 @@ class MerchantPaymentSlipController extends Controller
         $status = strtolower((string)$request->query('status', ''));
 
         $statusMap = [
+            'all' => null,
             'pending' => 'submitted',
             'submitted' => 'submitted',
             'approved' => 'approved',
@@ -44,7 +45,7 @@ class MerchantPaymentSlipController extends Controller
             ->orderByDesc('payment_slips.id')
             ->limit(100);
 
-        if ($status !== '' && isset($statusMap[$status])) {
+        if ($status !== '' && isset($statusMap[$status]) && $statusMap[$status] !== null) {
             $query->where('payment_slips.status', $statusMap[$status]);
         }
 

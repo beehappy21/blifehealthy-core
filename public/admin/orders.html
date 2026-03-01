@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin Orders</title>
+  <link rel="stylesheet" href="assets/shop.css">
+  <style>
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+    .toolbar input,.toolbar select{padding:8px;border:1px solid #d1d5db;border-radius:8px}
+    .toolbar input{flex:1;min-width:180px}
+    .actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+    .actions select{padding:8px;border:1px solid #d1d5db;border-radius:8px}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div id="header"></div>
+  <div class="toolbar">
+    <select id="statusFilter">
+      <option value="">ทุกสถานะ</option>
+      <option>WAITING_PAYMENT</option>
+      <option>PAYMENT_REVIEW</option>
+      <option>PAYMENT_REJECTED</option>
+      <option>PAID</option>
+      <option>SHIPPING_CREATED</option>
+      <option>SHIPPED</option>
+      <option>CANCELLED</option>
+    </select>
+    <input id="qFilter" placeholder="ค้นหาเลขออเดอร์/ลูกค้า/tracking">
+    <button id="searchBtn" class="btn">ค้นหา</button>
+  </div>
+  <div id="list"></div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="assets/api.js"></script>
+<script src="assets/app.js"></script>
+<script>
+renderHeader('Admin Orders v1');
+const listEl=document.getElementById('list');
+if(requireAuth()) load();
+document.getElementById('searchBtn').addEventListener('click',load);
+
+async function load(){
+  listEl.innerHTML='';
+  const loading=document.createElement('div');loading.className='loading';loading.textContent='Loading...';listEl.append(loading);
+  try{
+    const d=await api.get('/api/admin/orders',{status:document.getElementById('statusFilter').value||undefined,q:document.getElementById('qFilter').value.trim()||undefined});
+    const items=d.items||[];
+    listEl.innerHTML='';
+    if(!items.length){const empty=document.createElement('div');empty.className='card';empty.textContent='ไม่มีออเดอร์';listEl.append(empty);return;}
+
+    items.forEach((it)=>{
+      const card=document.createElement('div');card.className='card';
+      const top=document.createElement('div');top.className='row between';
+      const b=document.createElement('b');b.textContent=it.order_no||`#${it.id}`;
+      const st=document.createElement('span');st.textContent=it.status||'-';
+      top.append(b,st);card.append(top);
+
+      const m1=document.createElement('div');m1.className='muted';m1.textContent=`ลูกค้า: ${it.customer_name||'-'} (${it.customer_phone||'-'})`;card.append(m1);
+      const m2=document.createElement('div');m2.className='muted';m2.textContent=`ร้าน: ${it.merchant_shop_name||'-'} | ยอดรวม: ${formatMoney(it.total)}`;card.append(m2);
+      const m3=document.createElement('div');m3.className='muted';m3.textContent=`Slip: ${it.payment_slip_status||'-'} | Tracking: ${it.shipment_tracking_no||'-'}`;card.append(m3);
+
+      const actions=document.createElement('div');actions.className='actions';
+      const statusSel=document.createElement('select');
+      ['WAITING_PAYMENT','PAYMENT_REVIEW','PAYMENT_REJECTED','PAID','SHIPPING_CREATED','SHIPPED','CANCELLED'].forEach((s)=>{const op=document.createElement('option');op.value=s;op.textContent=s;if(s===it.status)op.selected=true;statusSel.append(op)});
+      const btn=document.createElement('button');btn.className='btn';btn.textContent='Update Status';
+      btn.addEventListener('click',()=>updateStatus(it.id,statusSel.value));
+      actions.append(statusSel,btn);card.append(actions);
+      listEl.append(card);
+    });
+  }catch(e){listEl.innerHTML='';const err=document.createElement('div');err.className='error';err.textContent=e.message;listEl.append(err)}
+}
+
+async function updateStatus(id,status){
+  try{await api.post(`/api/admin/orders/${id}/status`,{status});showToast('อัปเดตสำเร็จ','success');load();}
+  catch(e){showToast(e.message,'error');}
+}
+</script>
+</body>
+</html>

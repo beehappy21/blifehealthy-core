@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Merchant Order Detail</title>
+  <link rel="stylesheet" href="assets/shop.css">
+  <style>
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .actions select,.actions input{padding:8px;border:1px solid #d1d5db;border-radius:8px}
+    .slip-image{max-width:100%;border:1px solid #e5e7eb;border-radius:10px}
+    .section-title{margin:16px 0 8px;font-weight:700}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div id="header"></div>
+  <div id="detail"></div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="assets/api.js"></script>
+<script src="assets/app.js"></script>
+<script>
+renderHeader('Order Detail');
+const detailEl=document.getElementById('detail');
+const orderId=qsi('id');
+if(requireAuth()&&orderId) loadDetail();
+
+function normalizeImageUrl(url){
+  if(!url) return '';
+  if(url.startsWith('http://')||url.startsWith('https://')) return url;
+  if(url.startsWith('/')) return shopSettings.getBaseUrl().replace(/\/$/,'') + url;
+  return shopSettings.getBaseUrl().replace(/\/$/,'') + '/storage/' + url.replace(/^\/+/, '');
+}
+
+function makeSectionTitle(text){const el=document.createElement('div');el.className='section-title';el.textContent=text;return el;}
+function makeMuted(text){const el=document.createElement('div');el.className='muted';el.textContent=text;return el;}
+
+async function loadDetail(){
+  detailEl.innerHTML='';
+  const loading=document.createElement('div');loading.className='loading';loading.textContent='Loading...';detailEl.appendChild(loading);
+  try{
+    const d=await api.get(`/api/merchant/orders/${orderId}`);
+    const order=d.order||{};
+    detailEl.innerHTML='';
+
+    const card=document.createElement('div');card.className='card';
+    const row=document.createElement('div');row.className='row between';
+    const code=document.createElement('b');code.textContent=order.order_no||`#${order.id}`;
+    const st=document.createElement('span');st.textContent=order.status||'-';
+    row.append(code,st);card.appendChild(row);
+    card.append(makeMuted(`ยอดรวม: ${formatMoney(order.total)}`));
+
+    const statusActions=document.createElement('div');statusActions.className='actions';
+    const statusSel=document.createElement('select');statusSel.id='newStatus';
+    ['WAITING_PAYMENT','PAYMENT_REVIEW','PAYMENT_REJECTED','PAID','SHIPPING_CREATED','SHIPPED','CANCELLED'].forEach((s)=>{const op=document.createElement('option');op.value=s;op.textContent=s; if(s===order.status) op.selected=true;statusSel.appendChild(op);});
+    const statusBtn=document.createElement('button');statusBtn.className='btn';statusBtn.textContent='Update Status';
+    statusBtn.addEventListener('click',async()=>{try{await api.post(`/api/merchant/orders/${orderId}/status`,{status:statusSel.value});showToast('อัปเดตสถานะสำเร็จ','success');loadDetail();}catch(e){showToast(e.message,'error');}});
+    statusActions.append(statusSel,statusBtn);
+    card.append(statusActions);
+
+    card.append(makeSectionTitle('Shipment'));
+    const shipWrap=document.createElement('div');shipWrap.className='actions';
+    const provider=document.createElement('input');provider.placeholder='Provider';provider.id='provider';provider.value=d.shipment?.provider||'';
+    const tracking=document.createElement('input');tracking.placeholder='Tracking No';tracking.id='tracking';tracking.value=d.shipment?.tracking_no||'';
+    const fee=document.createElement('input');fee.type='number';fee.step='0.01';fee.placeholder='Fee';fee.id='fee';fee.value=d.shipment?.fee||'';
+    const shipBtn=document.createElement('button');shipBtn.className='btn';shipBtn.textContent='Save Tracking';
+    shipBtn.addEventListener('click',async()=>{
+      try{await api.post(`/api/merchant/orders/${orderId}/shipment`,{provider:provider.value.trim(),tracking_no:tracking.value.trim(),fee:fee.value?Number(fee.value):0});showToast('บันทึก Tracking สำเร็จ','success');loadDetail();}catch(e){showToast(e.message,'error');}
+    });
+    shipWrap.append(provider,tracking,fee,shipBtn);card.append(shipWrap);
+
+    card.append(makeSectionTitle('Items'));
+    (d.items||[]).forEach((it)=>{card.append(makeMuted(`${it.product_name||it.sku} x ${it.qty} = ${formatMoney(it.line_total)}`));});
+
+    card.append(makeSectionTitle('Payment Slip'));
+    if(d.payment_slip){
+      card.append(makeMuted(`สถานะ: ${d.payment_slip.status||'-'}`));
+      card.append(makeMuted(`ยอดโอน: ${formatMoney(d.payment_slip.amount)}`));
+      const imgUrl=normalizeImageUrl(d.payment_slip.image_url);
+      if(imgUrl){
+        const link=document.createElement('a');link.href=imgUrl;link.target='_blank';
+        const img=document.createElement('img');img.className='slip-image';img.src=imgUrl;img.alt='payment slip';
+        link.appendChild(img);card.appendChild(link);
+      }
+    }else{card.append(makeMuted('ไม่มีข้อมูลสลิป'));}
+
+    detailEl.appendChild(card);
+  }catch(e){
+    detailEl.innerHTML='';
+    const err=document.createElement('div');err.className='error';err.textContent=e.message;detailEl.appendChild(err);
+  }
+}
+</script>
+</body>
+</html>
