@@ -1,0 +1,132 @@
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Coupons</title><link rel='stylesheet' href='assets/shop.css'></head><body>
+<div class='app'>
+  <div id='header'></div>
+  <div id='content'></div>
+</div>
+<div id='toast' class='toast'></div><div id='bottomNav'></div>
+<script src='assets/api.js'></script><script src='assets/app.js'></script><script>
+renderHeader('คูปองของฉัน');
+renderBottomNav('account');
+const content=document.getElementById('content');
+if(requireAuth()) loadCoupons();
+
+function normalizeItems(payload){
+  if(Array.isArray(payload)) return payload;
+  if(payload && Array.isArray(payload.items)) return payload.items;
+  if(payload && Array.isArray(payload.data)) return payload.data;
+  if(payload && Array.isArray(payload.coupons)) return payload.coupons;
+  return [];
+}
+
+function createLine(label, value){
+  const row=document.createElement('div');
+  row.className='row between';
+
+  const left=document.createElement('span');
+  left.className='muted';
+  left.textContent=label;
+
+  const right=document.createElement('span');
+  right.textContent=value;
+
+  row.appendChild(left);
+  row.appendChild(right);
+  return row;
+}
+
+function canConfirmCoupon(coupon){
+  const status=String(coupon.status||'').toLowerCase();
+  return !coupon.confirmed_at && (status==='pending_confirm' || status==='need_confirm' || status==='issued');
+}
+
+function createActionButtons(coupon){
+  const wrap=document.createElement('div');
+  wrap.style.marginTop='10px';
+
+  const copyBtn=document.createElement('button');
+  copyBtn.className='btn btn-ghost';
+  copyBtn.style.marginRight='8px';
+  copyBtn.textContent='คัดลอกโค้ด';
+  copyBtn.addEventListener('click', async function(){
+    try{
+      await navigator.clipboard.writeText(String(coupon.code||''));
+      showToast('คัดลอกแล้ว','info');
+    }catch(e){
+      showToast(e.message||'คัดลอกไม่สำเร็จ','error');
+    }
+  });
+  wrap.appendChild(copyBtn);
+
+  // IMPORTANT: อย่าเดา endpoint เอง
+  // เปิดเป็น true ต่อเมื่อยืนยันแล้วว่า backend มี route /api/me/coupons/{code}/confirm
+  const hasConfirmEndpoint=true;
+
+  if(hasConfirmEndpoint && canConfirmCoupon(coupon)){
+    const confirmBtn=document.createElement('button');
+    confirmBtn.className='btn btn-primary';
+    confirmBtn.textContent='ยืนยันคูปอง';
+    confirmBtn.addEventListener('click', async function(){
+      try{
+        await api.post('/api/me/coupons/'+encodeURIComponent(String(coupon.code||''))+'/confirm',{});
+        showToast('ยืนยันคูปองแล้ว','success');
+        await loadCoupons();
+      }catch(e){
+        showToast(e.message,'error');
+      }
+    });
+    wrap.appendChild(confirmBtn);
+  }
+
+  return wrap;
+}
+
+function createCouponCard(coupon){
+  const card=document.createElement('div');
+  card.className='card';
+
+  const code=document.createElement('div');
+  code.style.fontWeight='700';
+  code.style.fontFamily='monospace';
+  code.textContent=String(coupon.code||'-');
+  card.appendChild(code);
+
+  card.appendChild(createLine('สถานะ', String(coupon.status||'-')));
+
+  if(coupon.expires_at) card.appendChild(createLine('หมดอายุ', String(coupon.expires_at)));
+  if(coupon.issued_at) card.appendChild(createLine('ออกคูปอง', String(coupon.issued_at)));
+  if(coupon.confirmed_at) card.appendChild(createLine('ยืนยันแล้ว', String(coupon.confirmed_at)));
+  if(coupon.redeemed_at) card.appendChild(createLine('ใช้งานแล้ว', String(coupon.redeemed_at)));
+
+  card.appendChild(createActionButtons(coupon));
+  return card;
+}
+
+function showSingleCard(message){
+  content.replaceChildren();
+  const card=document.createElement('div');
+  card.className='card';
+  card.textContent=message;
+  content.appendChild(card);
+}
+
+async function loadCoupons(){
+  showSingleCard('Loading...');
+  try{
+    const response=await api.get('/api/me/coupons');
+    const items=normalizeItems(response);
+
+    if(items.length===0){
+      showSingleCard('ยังไม่มีคูปอง');
+      return;
+    }
+
+    content.replaceChildren();
+    for(const coupon of items){
+      content.appendChild(createCouponCard(coupon||{}));
+    }
+  }catch(e){
+    showToast(e.message,'error');
+    showSingleCard('โหลดคูปองไม่สำเร็จ');
+  }
+}
+</script></body></html>
