@@ -22,7 +22,7 @@
 | Product reviews | GET | `/api/products/{id}/reviews` | Public | path: id | `{ ok, items[] }` |
 | Create/Update review | POST | `/api/products/{id}/reviews` | Bearer | `rating,title,body` | `{ ok, review }` |
 | Register | POST | `/api/auth/register` | Public | `name,phone,password...` | `{ token, member_code... }` |
-| Login | POST | `/api/auth/login` | Public | `phone,password` | `{ token, member_code }` |
+| Login | POST | `/api/auth/login` | Public | `login,password` | `{ token, member_code }` |
 | Me | GET | `/api/me` | Bearer | - | `user json` |
 | Logout | POST | `/api/auth/logout` | Bearer | - | `{ ok: true }` |
 | My notifications | GET | `/api/me/notifications` | Bearer | - | `{ ok, items[] }` |
