@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\PosDeviceController;
 use App\Http\Controllers\Api\MerchantPosDeviceController;
 use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\MerchantPaymentSlipController;
 
 Route::get('/ping', fn () => response()->json(['ok' => true]));
 
@@ -85,6 +86,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/orders', [OrderController::class, 'index']);
     Route::get('/orders/{id}', [OrderController::class, 'show']);
     Route::post('/orders/{id}/payment-slip', [OrderController::class, 'uploadSlip']);
+
+    // --- merchant payment slips review
+    Route::get('/merchant/payment-slips', [MerchantPaymentSlipController::class, 'index']);
+    Route::post('/merchant/payment-slips/{id}/approve', [MerchantPaymentSlipController::class, 'approve']);
+    Route::post('/merchant/payment-slips/{id}/reject', [MerchantPaymentSlipController::class, 'reject']);
     // merchant profile / onboarding
     Route::post('/merchant/apply', [MerchantController::class, 'apply']);
     Route::post('/merchant/kyc', [MerchantController::class, 'submitKyc']);
