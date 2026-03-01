@@ -116,18 +116,34 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $data = $request->validate([
-            'phone' => ['required','string','max:20'],
+            'login' => ['nullable', 'string', 'max:150'],
+            'member_code' => ['nullable', 'string', 'max:20'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'email' => ['nullable', 'string', 'max:150'],
             'password' => ['required','string'],
         ]);
 
-        $user = User::where('phone', $data['phone'])->first();
+        $login = $data['login']
+            ?? $data['member_code']
+            ?? $data['phone']
+            ?? $data['email']
+            ?? null;
+
+        if (!$login) {
+            throw ValidationException::withMessages(['login' => 'กรุณาระบุรหัสสมาชิก/เบอร์โทร/อีเมล']);
+        }
+
+        $user = User::where('member_code', $login)
+            ->orWhere('phone', $login)
+            ->orWhere('email', $login)
+            ->first();
 
         if (!$user || !Hash::check($data['password'], $user->password_hash)) {
-            throw ValidationException::withMessages(['phone' => 'เบอร์หรือรหัสผ่านไม่ถูกต้อง']);
+            throw ValidationException::withMessages(['login' => 'รหัสสมาชิก/เบอร์/อีเมล หรือรหัสผ่านไม่ถูกต้อง']);
         }
 
         if ($user->status !== 'active') {
-            throw ValidationException::withMessages(['phone' => 'บัญชีถูกระงับ']);
+            throw ValidationException::withMessages(['login' => 'บัญชีถูกระงับ']);
         }
 
         $token = $user->createToken('mobile')->plainTextToken;
