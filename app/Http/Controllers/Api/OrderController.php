@@ -7,7 +7,10 @@ use App\Enums\PaymentSlipStatus;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Support\ApiError;
+<<<<<<< HEAD
 use App\Support\OrderEventLogger;
+=======
+>>>>>>> origin/main
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -231,6 +234,7 @@ class OrderController extends Controller
             'updated_at' => now(),
         ];
 
+<<<<<<< HEAD
         $orderUserId = (int) $order->user_id;
 
         $slip = DB::transaction(function () use ($id, $payload, $orderUserId) {
@@ -251,6 +255,23 @@ class OrderController extends Controller
             $orderRow = DB::table('orders')->where('id', (int) $id)->first();
             OrderEventLogger::emit('slip.submitted', (int) $id, $orderUserId, ['status' => OrderStatus::PAYMENT_REVIEW, 'order_no' => $orderRow->order_no ?? null]);
 
+=======
+        $slip = DB::transaction(function () use ($id, $payload) {
+            DB::table('orders')->where('id', (int) $id)->lockForUpdate()->first();
+            $exists = DB::table('payment_slips')->where('order_id', (int) $id)->lockForUpdate()->exists();
+            if ($exists) {
+                DB::table('payment_slips')->where('order_id', (int) $id)->update($payload);
+            } else {
+                $payload['created_at'] = now();
+                DB::table('payment_slips')->insert($payload);
+            }
+
+            DB::table('orders')->where('id', (int) $id)->update([
+                'status' => OrderStatus::PAYMENT_REVIEW,
+                'updated_at' => now(),
+            ]);
+
+>>>>>>> origin/main
             return DB::table('payment_slips')->where('order_id', (int) $id)->first();
         });
 
