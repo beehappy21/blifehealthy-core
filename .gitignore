@@ -29,3 +29,9 @@ Thumbs.db
 database.sqlite.backup_*
 storage_app_backup_*.zip
 
+
+# vendor templates (do not commit)
+_vendor/_incoming/
+_vendor/topdeal/
+
+
