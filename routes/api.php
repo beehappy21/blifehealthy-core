@@ -100,6 +100,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/merchant/orders/{id}', [MerchantOrderController::class, 'show']);
     Route::post('/merchant/orders/{id}/status', [MerchantOrderController::class, 'updateStatus']);
     Route::post('/merchant/orders/{id}/shipment', [MerchantOrderController::class, 'upsertShipment']);
+    Route::patch('/merchant/orders/{id}/shipment', [MerchantOrderController::class, 'upsertShipment']);
+    Route::patch('/merchant/orders/{id}/mark-shipped', [MerchantOrderController::class, 'markShipped']);
+    Route::patch('/merchant/orders/{id}/cancel', [MerchantOrderController::class, 'cancelOrder']);
 
     // merchant profile / onboarding
     Route::post('/merchant/apply', [MerchantController::class, 'apply']);
@@ -137,6 +140,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/orders', [AdminOrderController::class, 'index']);
         Route::get('/admin/orders/{id}', [AdminOrderController::class, 'show']);
         Route::post('/admin/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
+        Route::patch('/admin/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
+        Route::patch('/admin/orders/{id}/shipment', [AdminOrderController::class, 'upsertShipment']);
+        Route::patch('/admin/orders/{id}/mark-shipped', [AdminOrderController::class, 'markShipped']);
     });
 
 });
