@@ -2,26 +2,18 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class MerchantOrderController extends Controller
 {
-    private const ALLOWED_STATUSES = [
-        'WAITING_PAYMENT',
-        'PAYMENT_REVIEW',
-        'PAYMENT_REJECTED',
-        'PAID',
-        'SHIPPING_CREATED',
-        'SHIPPED',
-        'CANCELLED',
-    ];
-
     public function index(Request $request)
     {
         $ownerId = (int) $request->user()->id;
-        $status = strtoupper((string) $request->query('status', ''));
+        $status = OrderStatus::normalize((string) $request->query('status', ''));
         $q = trim((string) $request->query('q', ''));
 
         $query = DB::table('orders')
@@ -47,7 +39,7 @@ class MerchantOrderController extends Controller
             ->orderByDesc('orders.id')
             ->limit(200);
 
-        if ($status !== '' && in_array($status, self::ALLOWED_STATUSES, true)) {
+        if ($status !== '' && in_array($status, OrderStatus::values(), true)) {
             $query->where('orders.status', $status);
         }
 
@@ -59,10 +51,7 @@ class MerchantOrderController extends Controller
             });
         }
 
-        return response()->json([
-            'ok' => true,
-            'items' => $query->get(),
-        ]);
+        return response()->json(['ok' => true, 'items' => $query->get()]);
     }
 
     public function show(Request $request, $id)
@@ -84,10 +73,7 @@ class MerchantOrderController extends Controller
             ->leftJoin('products', 'products.id', '=', 'order_items.product_id')
             ->where('order_items.order_id', (int) $id)
             ->orderBy('order_items.id')
-            ->select([
-                'order_items.*',
-                'products.name as product_name',
-            ])
+            ->select(['order_items.*', 'products.name as product_name'])
             ->get();
 
         $paymentSlip = DB::table('payment_slips')->where('order_id', (int) $id)->first();
@@ -106,9 +92,10 @@ class MerchantOrderController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $ownerId = (int) $request->user()->id;
-        $data = $request->validate([
-            'status' => ['required', 'string', 'in:' . implode(',', self::ALLOWED_STATUSES)],
-        ]);
+        $data = $request->validate(['status' => ['required', 'string']]);
+        $data['status'] = OrderStatus::normalize($data['status']);
+
+        Validator::make($data, ['status' => ['required', 'in:' . implode(',', OrderStatus::values())]])->validate();
 
         $updated = DB::table('orders')
             ->join('merchants', 'merchants.id', '=', 'orders.merchant_id')
@@ -123,9 +110,7 @@ class MerchantOrderController extends Controller
             return response()->json(['ok' => false, 'message' => 'order not found'], 404);
         }
 
-        $order = DB::table('orders')->where('id', (int) $id)->first();
-
-        return response()->json(['ok' => true, 'order' => $order]);
+        return response()->json(['ok' => true, 'order' => DB::table('orders')->where('id', (int) $id)->first()]);
     }
 
     public function upsertShipment(Request $request, $id)
@@ -157,23 +142,17 @@ class MerchantOrderController extends Controller
         ];
 
         $exists = DB::table('shipments')->where('order_id', (int) $id)->exists();
-
         if ($exists) {
             DB::table('shipments')->where('order_id', (int) $id)->update($shipmentPayload);
         } else {
-            DB::table('shipments')->insert(array_merge($shipmentPayload, [
-                'order_id' => (int) $id,
-                'created_at' => now(),
-            ]));
+            DB::table('shipments')->insert(array_merge($shipmentPayload, ['order_id' => (int) $id, 'created_at' => now()]));
         }
 
         DB::table('orders')->where('id', (int) $id)->update([
-            'status' => 'SHIPPING_CREATED',
+            'status' => OrderStatus::SHIPPING_CREATED,
             'updated_at' => now(),
         ]);
 
-        $shipment = DB::table('shipments')->where('order_id', (int) $id)->first();
-
-        return response()->json(['ok' => true, 'shipment' => $shipment]);
+        return response()->json(['ok' => true, 'shipment' => DB::table('shipments')->where('order_id', (int) $id)->first()]);
     }
 }

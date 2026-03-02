@@ -2,25 +2,17 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class AdminOrderController extends Controller
 {
-    private const ALLOWED_STATUSES = [
-        'WAITING_PAYMENT',
-        'PAYMENT_REVIEW',
-        'PAYMENT_REJECTED',
-        'PAID',
-        'SHIPPING_CREATED',
-        'SHIPPED',
-        'CANCELLED',
-    ];
-
     public function index(Request $request)
     {
-        $status = strtoupper((string) $request->query('status', ''));
+        $status = OrderStatus::normalize((string) $request->query('status', ''));
         $q = trim((string) $request->query('q', ''));
 
         $query = DB::table('orders')
@@ -46,7 +38,7 @@ class AdminOrderController extends Controller
             ->orderByDesc('orders.id')
             ->limit(200);
 
-        if ($status !== '' && in_array($status, self::ALLOWED_STATUSES, true)) {
+        if ($status !== '' && in_array($status, OrderStatus::values(), true)) {
             $query->where('orders.status', $status);
         }
 
@@ -85,30 +77,25 @@ class AdminOrderController extends Controller
             ->leftJoin('products', 'products.id', '=', 'order_items.product_id')
             ->where('order_items.order_id', (int) $id)
             ->orderBy('order_items.id')
-            ->select([
-                'order_items.*',
-                'products.name as product_name',
-            ])
+            ->select(['order_items.*', 'products.name as product_name'])
             ->get();
-
-        $paymentSlip = DB::table('payment_slips')->where('order_id', (int) $id)->first();
-        $shipment = DB::table('shipments')->where('order_id', (int) $id)->first();
 
         return response()->json([
             'ok' => true,
             'order' => $order,
             'items' => $items,
-            'payment_slip' => $paymentSlip,
-            'shipment' => $shipment,
+            'payment_slip' => DB::table('payment_slips')->where('order_id', (int) $id)->first(),
+            'shipment' => DB::table('shipments')->where('order_id', (int) $id)->first(),
             'address_snapshot' => null,
         ]);
     }
 
     public function updateStatus(Request $request, $id)
     {
-        $data = $request->validate([
-            'status' => ['required', 'string', 'in:' . implode(',', self::ALLOWED_STATUSES)],
-        ]);
+        $data = $request->validate(['status' => ['required', 'string']]);
+        $data['status'] = OrderStatus::normalize($data['status']);
+
+        Validator::make($data, ['status' => ['required', 'in:' . implode(',', OrderStatus::values())]])->validate();
 
         $updated = DB::table('orders')->where('id', (int) $id)->update([
             'status' => $data['status'],
@@ -119,9 +106,6 @@ class AdminOrderController extends Controller
             return response()->json(['ok' => false, 'message' => 'order not found'], 404);
         }
 
-        return response()->json([
-            'ok' => true,
-            'order' => DB::table('orders')->where('id', (int) $id)->first(),
-        ]);
+        return response()->json(['ok' => true, 'order' => DB::table('orders')->where('id', (int) $id)->first()]);
     }
 }

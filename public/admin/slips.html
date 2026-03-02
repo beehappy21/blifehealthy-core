@@ -36,6 +36,13 @@ const listEl=document.getElementById('list');
 if(requireAuth()) load();
 document.getElementById('searchBtn').addEventListener('click',load);
 
+
+function friendlyErrorMessage(e){
+  if(e && e.status===403) return 'ไม่มีสิทธิ์';
+  if(e && e.status===409) return 'สถานะออเดอร์ไม่ถูกต้อง/มีสลิปใหม่กว่า กรุณารีเฟรช';
+  return e?.message || 'เกิดข้อผิดพลาด';
+}
+
 function normalizeImageUrl(url){
   if(!url) return '';
   if(url.startsWith('http://')||url.startsWith('https://')) return url;
@@ -83,7 +90,7 @@ async function review(id,action,note){
     await api.post(`/api/admin/payment-slips/${id}/${action}`,{note:note||null});
     showToast('บันทึกสำเร็จ','success');
     load();
-  }catch(e){showToast(e.message,'error');}
+  }catch(e){showToast(friendlyErrorMessage(e),'error');}
 }
 </script>
 </body>
