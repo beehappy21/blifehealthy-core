@@ -38,7 +38,7 @@ function normalizeImageUrl(url){
 async function load(){
   list.innerHTML='<div class="loading">Loading...</div>';
   try{
-    const d=await api.get('/api/merchant/payment-slips',{status:'pending'});
+    const d=await api.get('/api/merchant/payment-slips',{status:'submitted'});
     const items=d.items||[];
     if(!items.length){list.innerHTML="<div class='card'>ไม่มีสลิปรอรีวิว</div>";return;}
     list.innerHTML=items.map(it=>{

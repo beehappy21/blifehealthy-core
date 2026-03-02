@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\OrderStatus;
+use App\Enums\PaymentSlipStatus;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -118,7 +120,7 @@ class OrderController extends Controller
                 'order_no' => $orderNo,
                 'user_id' => $userId,
                 'merchant_id' => (int)$merchantId,
-                'status' => 'WAITING_PAYMENT',
+                'status' => OrderStatus::WAITING_PAYMENT,
                 'subtotal' => round($subtotal, 2),
                 'shipping_fee' => round($shippingFee, 2),
                 'total' => round($total, 2),
@@ -207,24 +209,29 @@ class OrderController extends Controller
             'image_url' => $url,
             'amount' => round((float)($data['amount'] ?? $order->total), 2),
             'transfer_at' => $data['transfer_at'] ?? null,
-            'status' => 'submitted',
+            'status' => PaymentSlipStatus::SUBMITTED,
             'admin_note' => null,
             'reviewed_by' => null,
             'reviewed_at' => null,
             'updated_at' => now(),
         ];
 
-        $exists = DB::table('payment_slips')->where('order_id', (int)$id)->exists();
-        if ($exists) {
-            DB::table('payment_slips')->where('order_id', (int)$id)->update($payload);
-        } else {
-            $payload['created_at'] = now();
-            DB::table('payment_slips')->insert($payload);
-        }
+        $slip = DB::transaction(function () use ($id, $payload) {
+            $exists = DB::table('payment_slips')->where('order_id', (int) $id)->lockForUpdate()->exists();
+            if ($exists) {
+                DB::table('payment_slips')->where('order_id', (int) $id)->update($payload);
+            } else {
+                $payload['created_at'] = now();
+                DB::table('payment_slips')->insert($payload);
+            }
 
-        DB::table('orders')->where('id', (int)$id)->update(['status' => 'PAYMENT_REVIEW', 'updated_at' => now()]);
+            DB::table('orders')->where('id', (int) $id)->update([
+                'status' => OrderStatus::PAYMENT_REVIEW,
+                'updated_at' => now(),
+            ]);
 
-        $slip = DB::table('payment_slips')->where('order_id', (int)$id)->first();
+            return DB::table('payment_slips')->where('order_id', (int) $id)->first();
+        });
 
         return response()->json(['ok' => true, 'item' => $slip]);
     }

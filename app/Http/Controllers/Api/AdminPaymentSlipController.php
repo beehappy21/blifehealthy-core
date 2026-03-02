@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\OrderStatus;
+use App\Enums\PaymentSlipStatus;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,8 +12,7 @@ class AdminPaymentSlipController extends Controller
 {
     public function index(Request $request)
     {
-        $status = strtolower((string) $request->query('status', ''));
-        $allowedStatuses = ['submitted', 'approved', 'rejected'];
+        $status = PaymentSlipStatus::normalize((string) $request->query('status', ''));
 
         $query = DB::table('payment_slips')
             ->join('orders', 'orders.id', '=', 'payment_slips.order_id')
@@ -27,7 +28,7 @@ class AdminPaymentSlipController extends Controller
             ->orderByDesc('payment_slips.id')
             ->limit(200);
 
-        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
+        if ($status !== '' && in_array($status, PaymentSlipStatus::values(), true)) {
             $query->where('payment_slips.status', $status);
         }
 
@@ -36,12 +37,8 @@ class AdminPaymentSlipController extends Controller
 
     public function approve(Request $request, $id)
     {
-        $data = $request->validate([
-            'note' => ['nullable', 'string', 'max:255'],
-        ]);
-
-        $userId = (int) $request->user()->id;
-        $result = $this->reviewSlip((int) $id, $userId, 'approved', $data['note'] ?? null);
+        $data = $request->validate(['note' => ['nullable', 'string', 'max:255']]);
+        $result = $this->reviewSlip((int) $id, (int) $request->user()->id, PaymentSlipStatus::APPROVED, $data['note'] ?? null);
 
         if (!$result) {
             return response()->json(['ok' => false, 'message' => 'payment slip not found'], 404);
@@ -52,12 +49,8 @@ class AdminPaymentSlipController extends Controller
 
     public function reject(Request $request, $id)
     {
-        $data = $request->validate([
-            'note' => ['required', 'string', 'max:255'],
-        ]);
-
-        $userId = (int) $request->user()->id;
-        $result = $this->reviewSlip((int) $id, $userId, 'rejected', $data['note']);
+        $data = $request->validate(['note' => ['required', 'string', 'max:255']]);
+        $result = $this->reviewSlip((int) $id, (int) $request->user()->id, PaymentSlipStatus::REJECTED, $data['note']);
 
         if (!$result) {
             return response()->json(['ok' => false, 'message' => 'payment slip not found'], 404);
@@ -69,12 +62,7 @@ class AdminPaymentSlipController extends Controller
     private function reviewSlip(int $slipId, int $reviewerId, string $status, ?string $note): ?object
     {
         return DB::transaction(function () use ($slipId, $reviewerId, $status, $note) {
-            $row = DB::table('payment_slips')
-                ->where('id', $slipId)
-                ->select(['id', 'order_id'])
-                ->lockForUpdate()
-                ->first();
-
+            $row = DB::table('payment_slips')->where('id', $slipId)->select(['id', 'order_id'])->lockForUpdate()->first();
             if (!$row) {
                 return null;
             }
@@ -87,16 +75,24 @@ class AdminPaymentSlipController extends Controller
                 'updated_at' => now(),
             ]);
 
-            $orderUpdate = [
-                'status' => $status === 'approved' ? 'PAID' : 'PAYMENT_REJECTED',
-                'updated_at' => now(),
-            ];
+            $latestSlip = DB::table('payment_slips')
+                ->where('order_id', (int) $row->order_id)
+                ->orderByDesc('id')
+                ->lockForUpdate()
+                ->first();
 
-            if ($status === 'approved') {
-                $orderUpdate['paid_at'] = now();
+            if ($latestSlip) {
+                $orderUpdate = [
+                    'status' => $latestSlip->status === PaymentSlipStatus::APPROVED ? OrderStatus::PAID : OrderStatus::PAYMENT_REJECTED,
+                    'updated_at' => now(),
+                ];
+
+                if ($latestSlip->status === PaymentSlipStatus::APPROVED) {
+                    $orderUpdate['paid_at'] = now();
+                }
+
+                DB::table('orders')->where('id', (int) $row->order_id)->update($orderUpdate);
             }
-
-            DB::table('orders')->where('id', (int) $row->order_id)->update($orderUpdate);
 
             return DB::table('payment_slips')->where('id', $slipId)->first();
         });
