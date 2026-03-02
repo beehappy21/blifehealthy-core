@@ -8,8 +8,19 @@ git remote add origin <repo-url>
 git fetch origin
 git branch --set-upstream-to=origin/main main
 ```
+- ถ้าเครื่องยังไม่มี local `main` branch (เช่น fresh clone บาง environment) ให้ bootstrap ก่อน:
+```bash
+git fetch origin main
+git checkout -b main origin/main
+git pull
+```
 - ตรวจ `.env` ให้ถูกต้อง (`APP_ENV`, DB connection, APP_URL)
 - ตั้ง `SESSION_DRIVER=file`
+- SQLite bootstrap (กัน `migrate` fail เมื่อไฟล์ยังไม่ถูกสร้าง):
+```bash
+mkdir -p database
+touch database/database.sqlite
+```
 - สร้าง symlink สำหรับไฟล์อัปโหลด:
 ```bash
 php artisan storage:link
@@ -19,6 +30,7 @@ php artisan storage:link
 ## 2) Deploy/Setup Commands
 ```bash
 composer install --no-interaction --prefer-dist --optimize-autoloader
+mkdir -p database && touch database/database.sqlite
 php artisan migrate --force
 php artisan db:seed --force
 php artisan test
@@ -26,6 +38,7 @@ php artisan test
 
 ## 3) Local sanity (fresh env)
 ```bash
+mkdir -p database && touch database/database.sqlite
 APP_ENV=local php artisan migrate:fresh --seed
 APP_ENV=local php artisan demo:checkout
 APP_ENV=local php artisan tinker --execute="echo DB::table('users')->whereNull('referrer_member_code')->count();"
