@@ -195,6 +195,21 @@ class OrderController extends Controller
             return response()->json(['ok' => false, 'message' => 'order not found'], 404);
         }
 
+        $blockedUploadStatuses = [
+            OrderStatus::CANCELLED,
+            OrderStatus::SHIPPED,
+            OrderStatus::SHIPPING_CREATED,
+            OrderStatus::PAID,
+        ];
+
+        if (in_array($order->status, $blockedUploadStatuses, true)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'cannot upload slip for current order status',
+                'order_status' => $order->status,
+            ], 409);
+        }
+
         $data = $request->validate([
             'slip' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'amount' => ['nullable', 'numeric', 'min:0'],
@@ -217,6 +232,7 @@ class OrderController extends Controller
         ];
 
         $slip = DB::transaction(function () use ($id, $payload) {
+            DB::table('orders')->where('id', (int) $id)->lockForUpdate()->first();
             $exists = DB::table('payment_slips')->where('order_id', (int) $id)->lockForUpdate()->exists();
             if ($exists) {
                 DB::table('payment_slips')->where('order_id', (int) $id)->update($payload);

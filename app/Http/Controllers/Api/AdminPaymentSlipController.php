@@ -38,37 +38,45 @@ class AdminPaymentSlipController extends Controller
     public function approve(Request $request, $id)
     {
         $data = $request->validate(['note' => ['nullable', 'string', 'max:255']]);
-        $result = $this->reviewSlip((int) $id, (int) $request->user()->id, PaymentSlipStatus::APPROVED, $data['note'] ?? null);
-
-        if (!$result) {
-            return response()->json(['ok' => false, 'message' => 'payment slip not found'], 404);
-        }
-
-        return response()->json(['ok' => true, 'item' => $result]);
+        return $this->reviewSlip((int) $id, (int) $request->user()->id, PaymentSlipStatus::APPROVED, $data['note'] ?? null);
     }
 
     public function reject(Request $request, $id)
     {
         $data = $request->validate(['note' => ['required', 'string', 'max:255']]);
-        $result = $this->reviewSlip((int) $id, (int) $request->user()->id, PaymentSlipStatus::REJECTED, $data['note']);
+        return $this->reviewSlip((int) $id, (int) $request->user()->id, PaymentSlipStatus::REJECTED, $data['note']);
+    }
 
-        if (!$result) {
+    private function reviewSlip(int $slipId, int $reviewerId, string $decisionStatus, ?string $note)
+    {
+        $slip = DB::table('payment_slips')
+            ->join('orders', 'orders.id', '=', 'payment_slips.order_id')
+            ->where('payment_slips.id', $slipId)
+            ->select([
+                'payment_slips.id as slip_id',
+                'orders.id as order_id',
+                'orders.status as order_status',
+            ])
+            ->first();
+
+        if (!$slip) {
             return response()->json(['ok' => false, 'message' => 'payment slip not found'], 404);
         }
 
-        return response()->json(['ok' => true, 'item' => $result]);
-    }
+        if ($slip->order_status !== OrderStatus::PAYMENT_REVIEW) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'order is not in PAYMENT_REVIEW state',
+                'order_status' => $slip->order_status,
+            ], 409);
+        }
 
-    private function reviewSlip(int $slipId, int $reviewerId, string $status, ?string $note): ?object
-    {
-        return DB::transaction(function () use ($slipId, $reviewerId, $status, $note) {
-            $row = DB::table('payment_slips')->where('id', $slipId)->select(['id', 'order_id'])->lockForUpdate()->first();
-            if (!$row) {
-                return null;
-            }
+        $item = DB::transaction(function () use ($slip, $reviewerId, $decisionStatus, $note) {
+            DB::table('orders')->where('id', (int) $slip->order_id)->lockForUpdate()->first();
+            DB::table('payment_slips')->where('id', (int) $slip->slip_id)->lockForUpdate()->first();
 
-            DB::table('payment_slips')->where('id', $slipId)->update([
-                'status' => $status,
+            DB::table('payment_slips')->where('id', (int) $slip->slip_id)->update([
+                'status' => $decisionStatus,
                 'admin_note' => $note,
                 'reviewed_by' => $reviewerId,
                 'reviewed_at' => now(),
@@ -76,25 +84,23 @@ class AdminPaymentSlipController extends Controller
             ]);
 
             $latestSlip = DB::table('payment_slips')
-                ->where('order_id', (int) $row->order_id)
+                ->where('order_id', (int) $slip->order_id)
+                ->orderByDesc('created_at')
                 ->orderByDesc('id')
                 ->lockForUpdate()
                 ->first();
 
             if ($latestSlip) {
-                $orderUpdate = [
+                DB::table('orders')->where('id', (int) $slip->order_id)->update([
                     'status' => $latestSlip->status === PaymentSlipStatus::APPROVED ? OrderStatus::PAID : OrderStatus::PAYMENT_REJECTED,
+                    'paid_at' => $latestSlip->status === PaymentSlipStatus::APPROVED ? now() : null,
                     'updated_at' => now(),
-                ];
-
-                if ($latestSlip->status === PaymentSlipStatus::APPROVED) {
-                    $orderUpdate['paid_at'] = now();
-                }
-
-                DB::table('orders')->where('id', (int) $row->order_id)->update($orderUpdate);
+                ]);
             }
 
-            return DB::table('payment_slips')->where('id', $slipId)->first();
+            return DB::table('payment_slips')->where('id', (int) $slip->slip_id)->first();
         });
+
+        return response()->json(['ok' => true, 'item' => $item]);
     }
 }
