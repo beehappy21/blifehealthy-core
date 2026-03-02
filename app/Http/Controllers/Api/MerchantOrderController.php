@@ -96,13 +96,20 @@ class MerchantOrderController extends Controller
     {
         $ownerId = (int) $request->user()->id;
         $data = $request->validate(['status' => ['required', 'string']]);
+<<<<<<< HEAD
         $status = OrderStatus::normalize($data['status']);
         Validator::make(['status' => $status], ['status' => ['required', 'in:' . implode(',', OrderStatus::values())]])->validate();
+=======
+        $data['status'] = OrderStatus::normalize($data['status']);
+
+        Validator::make($data, ['status' => ['required', 'in:' . implode(',', OrderStatus::values())]])->validate();
+>>>>>>> origin/main
 
         if ($status === OrderStatus::SHIPPED) {
             return $this->markShipped($request, $id);
         }
 
+<<<<<<< HEAD
         if ($status === OrderStatus::CANCELLED) {
             return $this->cancelOrder($request, $id);
         }
@@ -114,6 +121,8 @@ class MerchantOrderController extends Controller
 
         DB::table('orders')->where('id', (int) $id)->update(['status' => $status, 'updated_at' => now()]);
 
+=======
+>>>>>>> origin/main
         return response()->json(['ok' => true, 'order' => DB::table('orders')->where('id', (int) $id)->first()]);
     }
 
@@ -252,10 +261,33 @@ class MerchantOrderController extends Controller
             return response()->json(['ok' => false, 'message' => 'order not found'], 404);
         }
 
+<<<<<<< HEAD
         if ((int) $order->owner_user_id !== $ownerId) {
             return ApiError::forbidden('ไม่มีสิทธิ์');
         }
 
         return $order;
+=======
+        $shipmentPayload = [
+            'provider' => $data['provider'],
+            'tracking_no' => $data['tracking_no'],
+            'fee' => round((float) ($data['fee'] ?? 0), 2),
+            'updated_at' => now(),
+        ];
+
+        $exists = DB::table('shipments')->where('order_id', (int) $id)->exists();
+        if ($exists) {
+            DB::table('shipments')->where('order_id', (int) $id)->update($shipmentPayload);
+        } else {
+            DB::table('shipments')->insert(array_merge($shipmentPayload, ['order_id' => (int) $id, 'created_at' => now()]));
+        }
+
+        DB::table('orders')->where('id', (int) $id)->update([
+            'status' => OrderStatus::SHIPPING_CREATED,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['ok' => true, 'shipment' => DB::table('shipments')->where('order_id', (int) $id)->first()]);
+>>>>>>> origin/main
     }
 }

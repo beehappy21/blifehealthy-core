@@ -96,8 +96,14 @@ class AdminOrderController extends Controller
     public function updateStatus(Request $request, $id)
     {
         $data = $request->validate(['status' => ['required', 'string']]);
+<<<<<<< HEAD
         $status = OrderStatus::normalize($data['status']);
         Validator::make(['status' => $status], ['status' => ['required', 'in:' . implode(',', OrderStatus::values())]])->validate();
+=======
+        $data['status'] = OrderStatus::normalize($data['status']);
+
+        Validator::make($data, ['status' => ['required', 'in:' . implode(',', OrderStatus::values())]])->validate();
+>>>>>>> origin/main
 
         if ($status === OrderStatus::SHIPPED) {
             return $this->markShipped($request, $id);
@@ -112,6 +118,7 @@ class AdminOrderController extends Controller
             return response()->json(['ok' => false, 'message' => 'order not found'], 404);
         }
 
+<<<<<<< HEAD
         DB::table('orders')->where('id', (int) $id)->update(['status' => $status, 'updated_at' => now()]);
 
         return response()->json(['ok' => true, 'order' => DB::table('orders')->where('id', (int) $id)->first()]);
@@ -216,6 +223,8 @@ class AdminOrderController extends Controller
             'updated_at' => now(),
         ]);
 
+=======
+>>>>>>> origin/main
         return response()->json(['ok' => true, 'order' => DB::table('orders')->where('id', (int) $id)->first()]);
     }
 }

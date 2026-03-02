@@ -7,7 +7,10 @@ use App\Enums\PaymentSlipStatus;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Support\ApiError;
+<<<<<<< HEAD
 use App\Support\OrderEventLogger;
+=======
+>>>>>>> origin/main
 use Illuminate\Support\Facades\DB;
 
 class MerchantPaymentSlipController extends Controller
@@ -117,6 +120,7 @@ class MerchantPaymentSlipController extends Controller
                 'updated_at' => now(),
             ]);
 
+<<<<<<< HEAD
             $orderRow = DB::table('orders')->where('id', (int) $slip->order_id)->first();
             if ($orderRow) {
                 OrderEventLogger::emit(
@@ -127,6 +131,8 @@ class MerchantPaymentSlipController extends Controller
                 );
             }
 
+=======
+>>>>>>> origin/main
             return DB::table('payment_slips')->where('id', (int) $slip->slip_id)->first();
         });
 
