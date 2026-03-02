@@ -1,6 +1,13 @@
 # Release Checklist — WAP Merchant/Admin v1
 
 ## 1) Preconditions
+- ตรวจว่า branch ที่จะปล่อยมี remote tracking ครบ (`git remote -v`, `git branch -vv`)
+- ถ้ายังไม่มี remote ให้ตั้งก่อน deploy/merge เช่น:
+```bash
+git remote add origin <repo-url>
+git fetch origin
+git branch --set-upstream-to=origin/main main
+```
 - ตรวจ `.env` ให้ถูกต้อง (`APP_ENV`, DB connection, APP_URL)
 - ตั้ง `SESSION_DRIVER=file`
 - สร้าง symlink สำหรับไฟล์อัปโหลด:
