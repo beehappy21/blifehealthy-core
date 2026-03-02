@@ -1,6 +1,125 @@
 <!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Settings</title><link rel='stylesheet' href='assets/shop.css'></head><body>
-<div class='app'><div id='header'></div><div class='card'><label>API Base</label><input id='base' class='input'><label>Merchant ID</label><input id='merchant' class='input'><label>Token</label><textarea id='token' class='input'></textarea><button id='saveBtn' class='btn btn-primary'>Save</button></div><div class='card row'><button id='pingBtn' class='btn btn-ghost'>Test Ping</button><button id='meBtn' class='btn btn-ghost'>Test Me</button></div><pre id='out' class='card muted'></pre></div><div id='toast' class='toast'></div><script src='assets/api.js'></script><script src='assets/app.js'></script><script>
-renderHeader('Shop Settings');base.value=shopSettings.getBaseUrl();merchant.value=shopSettings.getMerchantId();token.value=shopSettings.getToken();
-saveBtn.onclick=()=>{shopSettings.setBaseUrl(base.value||window.location.origin);shopSettings.setMerchantId(merchant.value);shopSettings.setToken(token.value.trim());showToast('saved','success')}
-pingBtn.onclick=async()=>run('/api/ping');meBtn.onclick=async()=>run('/api/me');async function run(path){try{out.textContent=JSON.stringify(await api.get(path),null,2)}catch(e){out.textContent=e.message}}
+<div class='app'>
+  <div id='header'></div>
+  <div class='card'>
+    <label>API Base</label>
+    <input id='base' class='input' placeholder='https://<codespace>-8002.app.github.dev'>
+    <label>Merchant ID</label>
+    <input id='merchant' class='input' placeholder='1'>
+    <label>Token</label>
+    <textarea id='token' class='input' placeholder='Paste Sanctum bearer token'></textarea>
+    <button id='saveBtn' class='btn btn-primary'>Save</button>
+  </div>
+
+  <div class='card row'>
+    <button id='pingBtn' class='btn btn-ghost'>Test Ping</button>
+    <button id='meBtn' class='btn btn-ghost'>Test Me</button>
+  </div>
+
+  <div class='card'>
+    <h3 style='margin-top:0'>Diagnostics</h3>
+    <div id='diag' class='muted' style='white-space:pre-wrap'></div>
+  </div>
+
+  <pre id='out' class='card muted'></pre>
+</div>
+<div id='toast' class='toast'></div>
+<script src='assets/api.js'></script>
+<script src='assets/app.js'></script>
+<script>
+renderHeader('Shop Settings');
+
+function normalizeBaseUrl(raw){
+  const input=(raw||'').trim();
+  const fallback=window.location.origin;
+  if(!input) return fallback;
+  try{return new URL(input).origin}catch(_){
+    try{return new URL(`https://${input}`).origin}catch(__){
+      return fallback;
+    }
+  }
+}
+
+function normalizeToken(raw){return (raw||'').trim()}
+function normalizeMerchantId(raw){return (raw||'').trim()||'1'}
+function maskToken(v){if(!v) return '-'; const last4=v.slice(-4); return `${'x'.repeat(Math.min(8,Math.max(4,v.length-4)))}…${last4}`}
+
+function prefill(){
+  base.value=normalizeBaseUrl(shopSettings.getBaseUrl());
+  merchant.value=shopSettings.getMerchantId()||'1';
+  token.value=normalizeToken(shopSettings.getToken());
+  renderDiagnostics();
+}
+
+function persistCurrentValues({toast=true}={}){
+  const nextBase=normalizeBaseUrl(base.value);
+  const nextMerchant=normalizeMerchantId(merchant.value);
+  const nextToken=normalizeToken(token.value);
+  base.value=nextBase;
+  merchant.value=nextMerchant;
+  token.value=nextToken;
+  shopSettings.setBaseUrl(nextBase);
+  shopSettings.setMerchantId(nextMerchant);
+  shopSettings.setToken(nextToken);
+  renderDiagnostics();
+  if(toast) showToast('saved','success');
+}
+
+function renderDiagnostics(extra={}){
+  const storedBase=shopSettings.getBaseUrl();
+  const storedMerchant=shopSettings.getMerchantId()||'1';
+  const storedToken=shopSettings.getToken();
+  const lines=[
+    `API Base: ${storedBase||'-'}`,
+    `Merchant ID: ${storedMerchant}`,
+    `Token: ${storedToken?'set':'not set'}`,
+    `Token length: ${storedToken.length}`,
+    `Token masked: ${maskToken(storedToken)}`,
+    `Authorization header: ${extra.hasAuthHeader===undefined?'-':(extra.hasAuthHeader?'present':'missing')}`,
+    extra.note?`Note: ${extra.note}`:null,
+  ].filter(Boolean);
+  diag.textContent=lines.join('\n');
+}
+
+function buildErrorMessage(err,path,hasAuthHeader){
+  const status=err&&err.status;
+  const msg=err&&err.message?err.message:'Unknown error';
+  if(path==='/api/me'&&status===401){
+    return [
+      'Token ไม่ถูกต้อง/ไม่ใช่ของ environment นี้ หรือยังไม่ได้กด Save',
+      '',
+      'Checklist:',
+      '(a) กด Save',
+      '(b) ใส่ Merchant ID (เช่น 1)',
+      '(c) สร้าง token ใหม่ใน environment นี้: รัน `php artisan demo:checkout` แล้วคัดลอก “Customer token”',
+      '(d) หรือ login ผ่าน /shop/account.html เพื่อให้ระบบสร้าง token แล้วกลับมาหน้านี้',
+      '',
+      `Authorization header ตอนยิง request: ${hasAuthHeader?'มี':'ไม่มี'}`,
+      `API Base ปัจจุบัน: ${shopSettings.getBaseUrl()}`,
+    ].join('\n');
+  }
+  if(status===404||/404|Not Found/i.test(msg)){
+    return `${msg}\n\nตรวจสอบ API Base และพอร์ต Codespaces ให้ถูกต้อง (เช่น 8002/8000)\nBase ปัจจุบัน: ${shopSettings.getBaseUrl()}`;
+  }
+  return msg;
+}
+
+saveBtn.onclick=()=>persistCurrentValues({toast:true});
+pingBtn.onclick=async()=>{persistCurrentValues({toast:false});await run('/api/ping')};
+meBtn.onclick=async()=>{persistCurrentValues({toast:false});await run('/api/me')};
+
+async function run(path){
+  const runtimeToken=shopSettings.getToken();
+  const hasAuthHeader=!!runtimeToken;
+  renderDiagnostics({hasAuthHeader,note:`Testing ${path}`});
+  try{
+    out.textContent=JSON.stringify(await api.get(path),null,2);
+    renderDiagnostics({hasAuthHeader,note:`${path} OK`});
+  }catch(e){
+    out.textContent=buildErrorMessage(e,path,hasAuthHeader);
+    renderDiagnostics({hasAuthHeader,note:`${path} failed (${e.status||'error'})`});
+  }
+}
+
+prefill();
 </script></body></html>
