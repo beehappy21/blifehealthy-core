@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Closure;
+use App\Support\ApiError;
 use Illuminate\Http\Request;
 
 class EnsureAdmin
@@ -15,7 +16,7 @@ class EnsureAdmin
         }
 
         if (!$user->hasRole('admin')) {
-            return response()->json(['message' => 'Forbidden'], 403);
+            return ApiError::forbidden('ไม่มีสิทธิ์');
         }
 
         return $next($request);

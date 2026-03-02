@@ -48,7 +48,8 @@ class PaymentSlipReviewFlowTest extends TestCase
 
         Sanctum::actingAs($ownerB);
         $this->postJson("/api/merchant/payment-slips/{$slipId}/approve")
-            ->assertStatus(403);
+            ->assertStatus(403)
+            ->assertJson(['code' => 'FORBIDDEN_RESOURCE']);
 
         Sanctum::actingAs($ownerA);
         $this->postJson("/api/merchant/payment-slips/{$slipId}/approve")
@@ -61,7 +62,8 @@ class PaymentSlipReviewFlowTest extends TestCase
 
         Sanctum::actingAs($owner);
         $this->postJson("/api/merchant/payment-slips/{$slipId}/reject", ['note' => 'state test'])
-            ->assertStatus(409);
+            ->assertStatus(409)
+            ->assertJson(['code' => 'ORDER_STATE_CONFLICT']);
     }
 
     public function test_upload_slip_for_cancelled_order_is_blocked(): void
@@ -113,7 +115,38 @@ class PaymentSlipReviewFlowTest extends TestCase
         $this->post("/api/orders/{$orderId}/payment-slip", [
             'slip' => UploadedFile::fake()->image('slip.jpg'),
             'amount' => 100,
-        ])->assertStatus(409);
+        ])->assertStatus(409)->assertJson(['code' => 'ORDER_STATE_CONFLICT']);
+    }
+
+    public function test_approve_old_slip_is_blocked_when_newer_slip_exists(): void
+    {
+        [$owner, , $orderId, $oldSlipId] = $this->seedReviewCase('PAYMENT_REVIEW');
+
+        try {
+            DB::statement('DROP INDEX payment_slips_order_id_unique');
+        } catch (\Throwable $e) {
+            // sqlite auto-index fallback: continue if index name differs in this env
+        }
+
+        $newSlipId = DB::table('payment_slips')->insertGetId([
+            'order_id' => $orderId,
+            'image_url' => '/storage/slip-new.jpg',
+            'amount' => 100,
+            'status' => 'submitted',
+            'created_at' => now()->addSecond(),
+            'updated_at' => now()->addSecond(),
+        ]);
+
+        Sanctum::actingAs($owner);
+        $this->postJson("/api/merchant/payment-slips/{$oldSlipId}/approve")
+            ->assertStatus(409)
+            ->assertJson([
+                'code' => 'ORDER_STATE_CONFLICT',
+                'message' => 'Only latest slip can be reviewed',
+            ]);
+
+        $this->postJson("/api/merchant/payment-slips/{$newSlipId}/approve")
+            ->assertOk();
     }
 
     private function seedReviewCase(string $orderStatus): array

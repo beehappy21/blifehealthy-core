@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Enums\PaymentSlipStatus;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Support\ApiError;
 use Illuminate\Support\Facades\DB;
 
 class MerchantPaymentSlipController extends Controller
@@ -79,15 +80,11 @@ class MerchantPaymentSlipController extends Controller
         }
 
         if ((int) $slip->owner_user_id !== $ownerId) {
-            return response()->json(['ok' => false, 'message' => 'forbidden'], 403);
+            return ApiError::forbidden('ไม่มีสิทธิ์');
         }
 
         if ($slip->order_status !== OrderStatus::PAYMENT_REVIEW) {
-            return response()->json([
-                'ok' => false,
-                'message' => 'order is not in PAYMENT_REVIEW state',
-                'order_status' => $slip->order_status,
-            ], 409);
+            return ApiError::orderStateConflict('สถานะออเดอร์ไม่ถูกต้อง/มีสลิปใหม่กว่า กรุณารีเฟรช', ['order_status' => $slip->order_status]);
         }
 
         $result = DB::transaction(function () use ($slip, $ownerId, $decisionStatus, $note) {
@@ -109,16 +106,22 @@ class MerchantPaymentSlipController extends Controller
                 ->lockForUpdate()
                 ->first();
 
-            if ($latestSlip) {
-                DB::table('orders')->where('id', (int) $slip->order_id)->update([
-                    'status' => $latestSlip->status === PaymentSlipStatus::APPROVED ? OrderStatus::PAID : OrderStatus::PAYMENT_REJECTED,
-                    'paid_at' => $latestSlip->status === PaymentSlipStatus::APPROVED ? now() : null,
-                    'updated_at' => now(),
-                ]);
+            if (!$latestSlip || (int) $latestSlip->id !== (int) $slip->slip_id) {
+                return ['conflict' => true];
             }
+
+            DB::table('orders')->where('id', (int) $slip->order_id)->update([
+                'status' => $latestSlip->status === PaymentSlipStatus::APPROVED ? OrderStatus::PAID : OrderStatus::PAYMENT_REJECTED,
+                'paid_at' => $latestSlip->status === PaymentSlipStatus::APPROVED ? now() : null,
+                'updated_at' => now(),
+            ]);
 
             return DB::table('payment_slips')->where('id', (int) $slip->slip_id)->first();
         });
+
+        if (is_array($result) && ($result['conflict'] ?? false)) {
+            return ApiError::orderStateConflict('Only latest slip can be reviewed');
+        }
 
         return response()->json(['ok' => true, 'item' => $result]);
     }

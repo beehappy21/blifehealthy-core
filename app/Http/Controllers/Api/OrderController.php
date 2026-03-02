@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Enums\PaymentSlipStatus;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Support\ApiError;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -203,11 +204,7 @@ class OrderController extends Controller
         ];
 
         if (in_array($order->status, $blockedUploadStatuses, true)) {
-            return response()->json([
-                'ok' => false,
-                'message' => 'cannot upload slip for current order status',
-                'order_status' => $order->status,
-            ], 409);
+            return ApiError::orderStateConflict('สถานะออเดอร์ไม่ถูกต้อง/มีสลิปใหม่กว่า กรุณารีเฟรช', ['order_status' => $order->status]);
         }
 
         $data = $request->validate([
