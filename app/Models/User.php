@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -32,4 +33,13 @@ class User extends Authenticatable
     protected $casts = [
         'ref_locked_at' => 'datetime',
     ];
+
+    public function hasRole(string $name): bool
+    {
+        return DB::table('user_roles')
+            ->join('roles', 'roles.id', '=', 'user_roles.role_id')
+            ->where('user_roles.user_id', $this->id)
+            ->where('roles.name', $name)
+            ->exists();
+    }
 }

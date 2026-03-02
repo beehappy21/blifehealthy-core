@@ -17,7 +17,7 @@ async function request(method,path,{query,json,body}={}){
   const res=await fetch(url,{method,headers,body:payload,credentials:'include'});
   const data=await res.json().catch(()=>({ok:false,message:'invalid json'}));
   if(res.status===401&&window.showToast){showToast('Unauthorized กรุณา login ที่ Account/Settings','error');}
-  if(!res.ok){throw new Error(data.message||data.error||`HTTP ${res.status}`)}
+  if(!res.ok){const err=new Error(data.message||data.error||`HTTP ${res.status}`);err.status=res.status;err.code=data.code||data.error||null;throw err}
   return data;
 }
 const api={get:(p,q)=>request('GET',p,{query:q}),post:(p,j)=>request('POST',p,{json:j}),patch:(p,j)=>request('PATCH',p,{json:j}),delete:(p)=>request('DELETE',p,{}),upload:(p,formData)=>request('POST',p,{body:formData})};

@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\OrderStatus;
+use App\Enums\PaymentSlipStatus;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Support\ApiError;
+use App\Support\OrderEventLogger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -118,7 +122,7 @@ class OrderController extends Controller
                 'order_no' => $orderNo,
                 'user_id' => $userId,
                 'merchant_id' => (int)$merchantId,
-                'status' => 'WAITING_PAYMENT',
+                'status' => OrderStatus::WAITING_PAYMENT,
                 'subtotal' => round($subtotal, 2),
                 'shipping_fee' => round($shippingFee, 2),
                 'total' => round($total, 2),
@@ -143,7 +147,9 @@ class OrderController extends Controller
                 ]);
             }
 
-            return DB::table('orders')->where('id', $orderId)->first();
+            $created = DB::table('orders')->where('id', $orderId)->first();
+            OrderEventLogger::emit('order.created', $orderId, $userId, ['order_no' => $created->order_no, 'status' => $created->status]);
+            return $created;
         });
 
         return response()->json(['ok' => true, 'item' => $result], 201);
@@ -193,6 +199,17 @@ class OrderController extends Controller
             return response()->json(['ok' => false, 'message' => 'order not found'], 404);
         }
 
+        $blockedUploadStatuses = [
+            OrderStatus::CANCELLED,
+            OrderStatus::SHIPPED,
+            OrderStatus::SHIPPING_CREATED,
+            OrderStatus::PAID,
+        ];
+
+        if (in_array($order->status, $blockedUploadStatuses, true)) {
+            return ApiError::orderStateConflict('สถานะออเดอร์ไม่ถูกต้อง/มีสลิปใหม่กว่า กรุณารีเฟรช', ['order_status' => $order->status]);
+        }
+
         $data = $request->validate([
             'slip' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'amount' => ['nullable', 'numeric', 'min:0'],
@@ -207,24 +224,35 @@ class OrderController extends Controller
             'image_url' => $url,
             'amount' => round((float)($data['amount'] ?? $order->total), 2),
             'transfer_at' => $data['transfer_at'] ?? null,
-            'status' => 'submitted',
+            'status' => PaymentSlipStatus::SUBMITTED,
             'admin_note' => null,
             'reviewed_by' => null,
             'reviewed_at' => null,
             'updated_at' => now(),
         ];
 
-        $exists = DB::table('payment_slips')->where('order_id', (int)$id)->exists();
-        if ($exists) {
-            DB::table('payment_slips')->where('order_id', (int)$id)->update($payload);
-        } else {
-            $payload['created_at'] = now();
-            DB::table('payment_slips')->insert($payload);
-        }
+        $orderUserId = (int) $order->user_id;
 
-        DB::table('orders')->where('id', (int)$id)->update(['status' => 'PAYMENT_REVIEW', 'updated_at' => now()]);
+        $slip = DB::transaction(function () use ($id, $payload, $orderUserId) {
+            DB::table('orders')->where('id', (int) $id)->lockForUpdate()->first();
+            $exists = DB::table('payment_slips')->where('order_id', (int) $id)->lockForUpdate()->exists();
+            if ($exists) {
+                DB::table('payment_slips')->where('order_id', (int) $id)->update($payload);
+            } else {
+                $payload['created_at'] = now();
+                DB::table('payment_slips')->insert($payload);
+            }
 
-        $slip = DB::table('payment_slips')->where('order_id', (int)$id)->first();
+            DB::table('orders')->where('id', (int) $id)->update([
+                'status' => OrderStatus::PAYMENT_REVIEW,
+                'updated_at' => now(),
+            ]);
+
+            $orderRow = DB::table('orders')->where('id', (int) $id)->first();
+            OrderEventLogger::emit('slip.submitted', (int) $id, $orderUserId, ['status' => OrderStatus::PAYMENT_REVIEW, 'order_no' => $orderRow->order_no ?? null]);
+
+            return DB::table('payment_slips')->where('order_id', (int) $id)->first();
+        });
 
         return response()->json(['ok' => true, 'item' => $slip]);
     }
