@@ -1,0 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;700&family=Prompt:wght@300;400;500;700&display=swap');
+
+body{font-family:'Kanit','Prompt',system-ui,-apple-system,sans-serif}
+.td3-navbar{position:sticky;top:0;z-index:90;background:#fff;border-bottom:1px solid #e2e8f0}
+.td3-inner{max-width:1200px;margin:0 auto;padding:10px 16px;display:flex;justify-content:space-between;align-items:center}
+.td3-logo{font-weight:700;color:#0f172a;text-decoration:none}.td3-menu a{margin-left:10px;color:#475569;text-decoration:none;font-size:14px}
+.td3-hero-wrap,.td3-main{max-width:1200px;margin:0 auto;padding:12px 16px}
+.td3-hero{background:linear-gradient(120deg,#4f46e5,#7c3aed);color:#fff;border-radius:16px;padding:16px}.td3-hero h1{margin:0 0 8px;font-size:22px}.td3-hero p{margin:0;opacity:.95}
+.td3-head h2{margin:0}
+.topdeal-product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.topdeal-product-card{background:#fff;border-radius:14px;padding:10px;box-shadow:0 8px 22px rgba(15,23,42,.07)}
+.topdeal-product-card .product-img{height:130px}
+.topdeal-product-card h3{margin:10px 0 6px;font-size:16px}
+.topdeal-product-card .btn{display:inline-block;width:100%;text-align:center;text-decoration:none;margin-top:8px}
+@media (min-width: 992px){.topdeal-product-grid{grid-template-columns:repeat(3,minmax(0,1fr));}.td3-hero{padding:20px}.td3-hero h1{font-size:26px}}
+@media (min-width: 1280px){.topdeal-product-grid{grid-template-columns:repeat(4,minmax(0,1fr));}}

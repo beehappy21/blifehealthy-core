@@ -1,8 +1,87 @@
-<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Shop Home</title><link rel='stylesheet' href='assets/shop.css'></head>
-<body><div class='app'><div id='header'></div><div class='card'><input id='search' class='input' placeholder='ค้นหาสินค้า'></div><div id='list'></div></div><div id='toast' class='toast'></div><div id='bottomNav'></div>
-<script src='assets/api.js'></script><script src='assets/app.js'></script><script>
-renderHeader('Wellness Shop');renderBottomNav('home');if(requireMerchantId()) load();
-async function load(){const list=document.getElementById('list');list.innerHTML='<div class="loading">Loading...</div>';try{const d=await api.get(`/api/shop/${shopSettings.getMerchantId()}/products`);window.items=d.items||[];render(window.items)}catch(e){list.innerHTML=`<div class='error'>${e.message}</div>`}}
-function render(items){const q=(document.getElementById('search').value||'').toLowerCase();const rows=items.filter(i=>!q||i.name.toLowerCase().includes(q));document.getElementById('list').innerHTML=rows.map(i=>`<div class='card'><img class='product-img' src='${i.cover_url||''}'><h3>${i.name}</h3><div class='muted'>${i.description||''}</div><a href='product.html?id=${i.id}' class='btn btn-primary' style='display:inline-block;margin-top:8px'>ดูสินค้า</a></div>`).join('')||"<div class='card'>ไม่พบสินค้า</div>"}
-document.getElementById('search').addEventListener('input',()=>render(window.items||[]));
-</script></body></html>
+<!doctype html>
+<html lang='th'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width,initial-scale=1'>
+  <title>Shop Home - Topdeal Home3</title>
+  <link rel='stylesheet' href='assets/shop.css'>
+  <link rel='stylesheet' href='assets/topdeal-overrides.css'>
+</head>
+<body>
+  <header class='td3-navbar'>
+    <div class='td3-inner'>
+      <a href='index.html' class='td3-logo'>Topdeal Wellness</a>
+      <nav class='td3-menu'>
+        <a href='index.html'>Home</a>
+        <a href='cart.html'>Cart</a>
+        <a href='orders.html'>Orders</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class='td3-hero-wrap'>
+    <div id='header'></div>
+    <div class='td3-hero'>
+      <h1>Home3 Deals สำหรับสินค้าสุขภาพ</h1>
+      <p>Topdeal style + WAP hooks เดิม เพื่อให้ flow settings → index → product ทำงานต่อเนื่อง</p>
+    </div>
+  </section>
+
+  <main class='td3-main'>
+    <section class='card td3-search'>
+      <label for='search' class='muted'>ค้นหาสินค้า</label>
+      <div class='row'>
+        <input id='search' class='input' placeholder='พิมพ์ชื่อสินค้า...'>
+      </div>
+    </section>
+
+    <section>
+      <div class='row between td3-head'>
+        <h2>Our Product List</h2>
+        <a href='settings.html'>ตั้งค่า</a>
+      </div>
+      <div id='list' class='topdeal-product-grid'></div>
+    </section>
+  </main>
+
+  <div id='toast' class='toast'></div>
+  <div id='bottomNav'></div>
+
+  <script src='assets/api.js'></script>
+  <script src='assets/app.js'></script>
+  <script src='assets/cart.js'></script>
+  <script>
+    renderHeader('Wellness Shop');
+    renderBottomNav('home');
+
+    if (requireMerchantId()) loadProducts();
+
+    async function loadProducts() {
+      const list = document.getElementById('list');
+      list.innerHTML = '<div class="loading card">Loading...</div>';
+      try {
+        const d = await api.get(`/api/shop/${shopSettings.getMerchantId()}/products`);
+        window.items = d.items || [];
+        renderProducts(window.items);
+      } catch (e) {
+        list.innerHTML = `<div class='error card'>${e.message}</div>`;
+      }
+    }
+
+    function renderProducts(items) {
+      const q = (document.getElementById('search').value || '').toLowerCase();
+      const rows = items.filter(i => !q || (i.name || '').toLowerCase().includes(q));
+      document.getElementById('list').innerHTML = rows.map(i => `
+        <article class='topdeal-product-card'>
+          <img class='product-img' src='${i.cover_url || ''}' alt='${i.name || ''}'>
+          <h3>${i.name || ''}</h3>
+          <p class='muted'>${i.description || ''}</p>
+          <a href='product.html?id=${i.id}' class='btn btn-primary'>ดูสินค้า</a>
+        </article>
+      `).join('') || "<div class='card'>ไม่พบสินค้า</div>";
+    }
+
+    document.getElementById('search').addEventListener('input', () => renderProducts(window.items || []));
+  </script>
+</body>
+</html>
