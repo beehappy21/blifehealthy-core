@@ -3,12 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
-use App\Services\MemberCodeGenerator;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 
 class DemoCheckoutCommand extends Command
 {
@@ -23,7 +21,7 @@ class DemoCheckoutCommand extends Command
 
     protected $description = 'Seed demo checkout-ready data (customer+token, merchant+product+variant, default address).';
 
-    public function handle(MemberCodeGenerator $memberCodeGenerator): int
+    public function handle(): int
     {
         if (app()->environment('production')) {
             $this->error('demo:checkout is disabled in production.');
@@ -36,43 +34,28 @@ class DemoCheckoutCommand extends Command
             return self::FAILURE;
         }
 
-        $result = DB::transaction(function () use ($memberCodeGenerator, $price) {
-            $customer = $this->upsertUser(
-                (string)$this->option('customer-email'),
-                (string)$this->option('customer-password'),
-                'Demo Customer',
-                '08',
-                $memberCodeGenerator
-            );
+        $result = DB::transaction(function () use ($price) {
+            $customer = $this->upsertUser('TH0000001', (string) $this->option('customer-email'), (string) $this->option('customer-password'), 'Demo Customer', '0800000001');
             $customerToken = $customer->createToken('demo-checkout-customer')->plainTextToken;
 
+            $merchantOwner = $this->upsertUser('TH0000002', (string) $this->option('merchant-owner-email'), (string) $this->option('merchant-owner-password'), 'Demo Merchant Owner', '0900000001');
             $addressId = $this->ensureDefaultAddress($customer, 'Home');
+            $merchantId = $this->ensureMerchant($merchantOwner, (string) $this->option('merchant-name'));
+            $productId = $this->ensureProduct($merchantId, (string) $this->option('product-name'));
+            $variantId = $this->ensureVariant($productId, $price);
 
-            $merchantOwner = $this->upsertUser(
-                (string)$this->option('merchant-owner-email'),
-                (string)$this->option('merchant-owner-password'),
-                'Demo Merchant Owner',
-                '09',
-                $memberCodeGenerator
-            );
-
-            $merchantId = $this->ensureMerchant($merchantOwner, (string)$this->option('merchant-name'));
-            $productId  = $this->ensureProduct($merchantId, (string)$this->option('product-name'));
-            $variantId  = $this->ensureVariant($productId, $price);
-
-            return compact('customer','customerToken','merchantOwner','merchantId','productId','variantId','addressId');
+            return compact('customer', 'customerToken', 'merchantOwner', 'merchantId', 'productId', 'variantId', 'addressId');
         });
 
         $this->info('✅ Demo checkout data created');
-        $this->line('Customer ID: '.$result['customer']->id);
-        $this->line('Customer member_code: '.$result['customer']->member_code);
-        $this->line('Customer token: '.$result['customerToken']);
-        $this->line('Merchant owner ID: '.$result['merchantOwner']->id);
-        $this->line('Merchant ID: '.$result['merchantId']);
-        $this->line('Product ID: '.$result['productId']);
-        $this->line('Variant ID: '.$result['variantId']);
-        $this->line('Default address ID: '.$result['addressId']);
-
+        $this->line('Customer ID: ' . $result['customer']->id);
+        $this->line('Customer member_code: ' . $result['customer']->member_code);
+        $this->line('Customer token: ' . $result['customerToken']);
+        $this->line('Merchant owner ID: ' . $result['merchantOwner']->id);
+        $this->line('Merchant ID: ' . $result['merchantId']);
+        $this->line('Product ID: ' . $result['productId']);
+        $this->line('Variant ID: ' . $result['variantId']);
+        $this->line('Default address ID: ' . $result['addressId']);
         $this->line('WAP: /shop/settings.html , /shop/index.html');
         $this->line('API: /api/shop/{merchantId}/products');
 
@@ -85,157 +68,128 @@ class DemoCheckoutCommand extends Command
         return array_intersect_key($data, array_flip($cols));
     }
 
-    private function upsertUser(string $email, string $password, string $namePrefix, string $phonePrefix, MemberCodeGenerator $gen): User
+    private function upsertUser(string $memberCode, string $email, string $password, string $name, string $phone): User
     {
-        $existing = User::where('email', $email)->first();
-        if ($existing) {
-            $data = $this->filter('users', [
-                'password_hash' => Hash::make($password),
-                'password' => Hash::make($password),
-                'status' => 'active',
-                'updated_at' => now(),
-            ]);
-            $existing->forceFill($data)->save();
-            return $existing;
-        }
-
-        $data = $this->filter('users', [
-            'member_code' => $gen->generate(),
-            'name' => $namePrefix,
-            'phone' => $this->generateUniquePhone($phonePrefix),
+        $payload = $this->filter('users', [
+            'name' => $name,
+            'phone' => $phone,
             'email' => $email,
             'password_hash' => Hash::make($password),
             'password' => Hash::make($password),
             'status' => 'active',
             'ref_input_code' => null,
-            'referrer_member_code' => env('DEFAULT_SPONSOR_CODE', 'TH0000001'),
+            'referrer_member_code' => 'TH0000001',
             'ref_status' => 'DEFAULTED',
             'ref_source' => 'manual',
             'ref_locked_at' => now(),
-            'created_at' => now(),
             'updated_at' => now(),
+            'created_at' => now(),
         ]);
 
-        $u = new User();
-        $u->forceFill($data)->save();
-        return $u;
-    }
+        User::updateOrCreate(['member_code' => $memberCode], $payload);
 
-    private function generateUniquePhone(string $prefix): string
-    {
-        do {
-            $phone = $prefix.str_pad((string) random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
-        } while (User::where('phone', $phone)->exists());
-
-        return $phone;
+        return User::where('member_code', $memberCode)->firstOrFail();
     }
 
     private function ensureDefaultAddress(User $customer, string $label): int
     {
-        if (!Schema::hasTable('user_addresses')) {
-            throw new \RuntimeException('Missing table user_addresses');
-        }
-
-        // unset existing default if column exists
         if (Schema::hasColumn('user_addresses', 'is_default')) {
-            DB::table('user_addresses')->where('user_id', $customer->id)->update(['is_default' => false]);
+            DB::table('user_addresses')->where('user_id', $customer->id)->update(['is_default' => false, 'updated_at' => now()]);
         }
 
         $data = $this->filter('user_addresses', [
-            'user_id' => $customer->id,
             'label' => $label,
-            'name' => $customer->name,
             'receiver_name' => $customer->name,
-            'recipient_name' => $customer->name,
-            'phone' => $customer->phone,
             'receiver_phone' => $customer->phone,
-            'address' => '123 Demo Street',
             'address_line1' => '123 Demo Street',
             'address_line2' => null,
             'subdistrict' => 'Demo Subdistrict',
             'district' => 'Demo District',
             'province' => 'Bangkok',
             'postcode' => '10110',
-            'postal_code' => '10110',
             'country' => 'TH',
             'lat' => null,
             'lng' => null,
             'is_default' => true,
-            'created_at' => now(),
             'updated_at' => now(),
         ]);
 
+        $exists = DB::table('user_addresses')->where('user_id', $customer->id)->where('label', $label)->first();
+        if ($exists) {
+            DB::table('user_addresses')->where('id', (int) $exists->id)->update($data);
+            return (int) $exists->id;
+        }
+
+        $data['user_id'] = $customer->id;
+        $data['created_at'] = now();
         return DB::table('user_addresses')->insertGetId($data);
     }
 
     private function ensureMerchant(User $owner, string $merchantName): int
     {
-        if (!Schema::hasTable('merchants')) {
-            throw new \RuntimeException('Missing table merchants');
-        }
-
-        $data = $this->filter('merchants', [
-            'owner_user_id' => $owner->id,
-            'user_id' => $owner->id,
+        $payload = $this->filter('merchants', [
             'shop_name' => $merchantName,
-            'name' => $merchantName,
-            'display_name' => $merchantName,
-            'slug' => 'demo-shop-'.Str::lower(Str::random(6)),
             'phone' => $owner->phone,
             'email' => $owner->email,
             'status' => 'approved',
             'admin_note' => 'Generated by demo:checkout',
             'approved_at' => now(),
-            'rejected_at' => null,
-            'is_active' => 1,
-            'created_at' => now(),
             'updated_at' => now(),
+            'created_at' => now(),
         ]);
 
-        return DB::table('merchants')->insertGetId($data);
+        $exists = DB::table('merchants')->where('owner_user_id', $owner->id)->first();
+        if ($exists) {
+            DB::table('merchants')->where('id', (int) $exists->id)->update($payload);
+            return (int) $exists->id;
+        }
+
+        $payload['owner_user_id'] = $owner->id;
+        return DB::table('merchants')->insertGetId($payload);
     }
 
     private function ensureProduct(int $merchantId, string $productName): int
     {
-        if (!Schema::hasTable('products')) {
-            throw new \RuntimeException('Missing table products');
-        }
-
-        $data = $this->filter('products', [
-            'merchant_id' => $merchantId,
-            'category_id' => null,
+        $payload = $this->filter('products', [
             'name' => $productName,
-            'title' => $productName,
             'description' => 'Demo product created by demo:checkout.',
             'status' => 'active',
-            'is_active' => 1,
-            'is_published' => 1,
-            'created_at' => now(),
             'updated_at' => now(),
+            'created_at' => now(),
         ]);
 
-        return DB::table('products')->insertGetId($data);
+        $exists = DB::table('products')->where('merchant_id', $merchantId)->where('name', $productName)->first();
+        if ($exists) {
+            DB::table('products')->where('id', (int) $exists->id)->update($payload);
+            return (int) $exists->id;
+        }
+
+        $payload['merchant_id'] = $merchantId;
+        return DB::table('products')->insertGetId($payload);
     }
 
     private function ensureVariant(int $productId, float $price): int
     {
-        if (!Schema::hasTable('product_variants')) {
-            throw new \RuntimeException('Missing table product_variants');
-        }
-
-        $data = $this->filter('product_variants', [
+        $sku = 'DEMO-P' . str_pad((string) $productId, 8, '0', STR_PAD_LEFT);
+        $payload = $this->filter('product_variants', [
             'product_id' => $productId,
-            'sku' => 'DEMO-'.Str::upper(Str::random(10)),
+            'sku' => $sku,
             'option_json' => json_encode(['pack_qty' => 1], JSON_UNESCAPED_UNICODE),
             'price' => $price,
             'weight_g' => 300,
             'stock_qty' => 100,
             'stock' => 100,
             'status' => 'active',
-            'created_at' => now(),
             'updated_at' => now(),
+            'created_at' => now(),
         ]);
 
-        return DB::table('product_variants')->insertGetId($data);
+        $exists = DB::table('product_variants')->where('sku', $sku)->first();
+        if ($exists) {
+            DB::table('product_variants')->where('id', (int) $exists->id)->update($payload);
+            return (int) $exists->id;
+        }
+
+        return DB::table('product_variants')->insertGetId($payload);
     }
 }
